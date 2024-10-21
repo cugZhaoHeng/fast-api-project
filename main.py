@@ -1,8 +1,10 @@
 import json
 import os
 import time
+from typing import List
+from main1 import send
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Form, UploadFile, File
 import uvicorn
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -71,21 +73,13 @@ def generate_test_data():
             "answer": {
                 "item": [
                     {
-                        "ID": 0,
-                        "type": "text",
-                        "succ": True,
-                        "stop": True,
+                        "order": 1,
                         "source": "",
-                        "data": {
-                            "items": [
-                                {
-                                    "data": item
-                                }
-                            ]
-                        }
+                        "type": "text",
+                        "data": item
                     }
                 ],
-                "timeID": 1724813219.5195165
+                "timestamp": 1727164582.9313162
             }
         }
         yield f'data: {json.dumps(output, ensure_ascii=False)}\n\n'
@@ -99,7 +93,7 @@ async def stream_data():
     # return StreamingResponse(generate_json_stream(data), media_type="text/event-stream")
 
 
-@app.get("/all_drop_down_data")
+@app.post("/all_drop_down_data")
 async def all_drop_down_data():
     return {
         "topic_id": "default",
@@ -451,6 +445,16 @@ async def get_topic_history():
     #         }
     #     }
     # ]
+
+
+@app.post("/upload_file_list/")
+async def upload_files(
+        module_id: str = Form(...),
+        user_id: str = Form(...),
+        param_name: str = Form(...),
+        tag: str = Form(...),
+        files: List[UploadFile] = File(...), ):
+    print(len(files))
 
 
 if __name__ == "__main__":
