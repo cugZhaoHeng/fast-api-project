@@ -16,3 +16,6 @@ tqdm~=4.67.1
 ipython~=8.27.0
 torchaudio~=2.5.1+cu118
 responses~=0.25.7
+pandas~=2.2.3
+webdriver-manager~=4.0.2
+lxml~=6.0.0
