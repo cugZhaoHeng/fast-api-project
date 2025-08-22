@@ -6,6 +6,7 @@ from selenium.webdriver.support import expected_conditions as EC
 import csv
 import time
 
+
 # 配置
 KEYWORD = "Selenium 教程"
 MAX_PAGES = 3  # 爬取页数
