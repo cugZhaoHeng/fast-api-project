@@ -1,5 +1,9 @@
+import json
 import time
+from datetime import datetime, date
+
 import pandas as pd
+from pydantic import BaseModel
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -11,6 +15,9 @@ from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.chrome.service import Service as ChromeService
 import sys
 import os
+
+from utils.class_encoder import DateEncoder
+from utils.date_util import parse_date
 from utils.logger import create_logger
 
 current_path = os.path.abspath(__file__)
@@ -18,11 +25,21 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(current_path)))
 driver_path = os.path.join(project_root, "data/chromedriver-win64/chromedriver.exe")
 logger = create_logger(__name__)
 # 存储结果的列表
-results = []
 
+class BookInfo(BaseModel):
+    name: str = ""
+    rating_num: str = ""
+    author: str = ""
+    translator: str = ""
+    publisher: str = ""
+    publish_time: date = None
+    price: str = ""
+
+results: list[BookInfo] = []
 # 启动浏览器（推荐使用 webdriver-manager 自动管理驱动）
 # 安装：pip install webdriver-manager
 from webdriver_manager.chrome import ChromeDriverManager
+
 logger.info("====豆瓣爬虫准备开始====")
 options = webdriver.ChromeOptions()
 # 可选：设置无头模式（后台运行）
@@ -64,39 +81,51 @@ try:
     search_button.click()
     logger.info(f"正在搜索关键词：{keyword}")
 
-    # 等待页面加载出书籍列表
-    # 这里为什么是等待3s，如果等待3s之后也没有出来该怎么办？我觉得这里应该是等待某个标识被加载出来
-    time.sleep(3)
-
-    wait.until(EC.presence_of_element_located((By.CLASS_NAME, "item-root")))
-    items: list[WebElement] = driver.find_elements(By.CLASS_NAME, "item-root")
-
-    for item in items:
-        try:
-            detail: WebElement = item.find_element(By.CLASS_NAME, "detail")
-            title: WebElement = detail.find_element(By.CLASS_NAME, "title")
-            text: str = title.text
-            logger.info(f"当前书名：{text}")
-            rating: WebElement = detail.find_element(By.CLASS_NAME, "rating")
-            rating_nums: WebElement = rating.find_element(By.CLASS_NAME, "rating_nums")
-            logger.info(f"评分：{rating_nums.text}")
-
-            abstract: WebElement = detail.find_element(By.CLASS_NAME, "abstract")
-            abstract_text:str = abstract.text
-            abstract_list: list[str] = abstract_text.split(sep="/")
-            abstract_list = [a.strip() for a in abstract_list]
-            logger.info(f"描述：{abstract_list}")
-            author: str = abstract_list[0]
-            translator: str = abstract_list[1]
-            publisher: str = abstract_list[2]
-            publish_time = abstract_list[3]
-            price: str = abstract_list[4]
-            logger.info(f"作者：{author}, 翻译人员： {translator}, 出版社：{publisher}, 出版时间：{publish_time}, 定价：{price}")
-        except NoSuchElementException:
-            logger.error(f"item: {item.text}解析失败")
-            continue
 
 
+    for page in range(1, 5):
+        # 等待页面加载出书籍列表
+        # 这里为什么是等待3s，如果等待3s之后也没有出来该怎么办？我觉得这里应该是等待某个标识被加载出来
+        time.sleep(3)
+        wait.until(EC.presence_of_element_located((By.CLASS_NAME, "item-root")))
+        items: list[WebElement] = driver.find_elements(By.CLASS_NAME, "item-root")
+
+        logger.info(f"当前页数： {page}")
+        for item in items:
+            try:
+                detail: WebElement = item.find_element(By.CLASS_NAME, "detail")
+                title: str = detail.find_element(By.CSS_SELECTOR, ".title").text
+                rating_num: str = detail.find_element(By.CSS_SELECTOR, ".rating .rating_nums").text
+
+                abstract_text = detail.find_element(By.CSS_SELECTOR, ".abstract").text
+                abstract_list: list[str] = abstract_text.split(sep="/")
+                if len(abstract_list) > 5:
+                    continue
+                abstract_list = [a.strip() for a in abstract_list]
+                abstract_info = {
+                    "name": title,
+                    "rating_num": rating_num,
+                    "author": abstract_list[0],
+                    "translator": abstract_list[1],
+                    "publisher": abstract_list[2],
+                    "publish_time": parse_date(abstract_list[3]),
+                    "price": abstract_list[4],
+                }
+                logger.info(f"abstract_info: {json.dumps(abstract_info, ensure_ascii=False, cls=DateEncoder)}")
+                book_info = BookInfo(**abstract_info)
+                logger.info(f"book_info: {book_info.model_dump_json()}")
+                results.append(book_info)
+
+            except NoSuchElementException:
+                logger.error(f"item: {item.text}解析失败")
+                continue
+            except IndexError:
+                logger.error(f"item: {item.text}解析失败")
+                continue
+        # 点击下一页的按钮
+        next_button: WebElement = driver.find_element(By.CLASS_NAME, "next")
+        next_button.click()
+        logger.info(f"点击下一页")
 
     # 3. 循环翻页，采集前10页数据
     # for page in range(1, 11):
