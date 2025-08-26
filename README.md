@@ -31,3 +31,9 @@ feat(api): add pagination to user list endpoint
 这意味着这次提交为API添加了分页功能到用户列表端点，属于新特性的添加。
 
 遵循这样的规范有助于提高团队成员之间的沟通效率，便于自动化工具识别并处理不同类型的提交。同时也有利于自动生成详细的变更日志，简化发布流程。不过需要注意的是，这只是一个社区推荐的实践，并不是Git强制要求的标准。因此，具体项目可能会根据自身需求对这些规则进行调整。
+
+# Chrome浏览器驱动相关
+当前版本：  
+https://googlechromelabs.github.io/chrome-for-testing/
+历史版本：  
+https://chromedriver.storage.googleapis.com/index.html
