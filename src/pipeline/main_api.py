@@ -18,7 +18,7 @@ import re
 import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from starlette.responses import StreamingResponse
-from logger import create_logger
+from utils.logger import create_logger
 
 
 logger = create_logger(__name__)
@@ -122,7 +122,7 @@ async def process_csv_endpoint(file: UploadFile = File(...)):
         await file.close()
 
         # 3. 读取本地的 ZIP 文件（与当前 Python 文件同目录）
-        zip_filename = "processed_files.zip"
+        zip_filename = "data/processed_files.zip"
         # 获取当前文件所在目录
         current_dir = os.path.dirname(__file__)
         zip_path = os.path.join(current_dir, zip_filename)

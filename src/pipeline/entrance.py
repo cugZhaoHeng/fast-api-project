@@ -1,14 +1,15 @@
+import json
 from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 
-import user_pb2
-import sensor_data_pb2
-
+import sensor_history_pb2
 import main_api
+from utils.logger import create_logger
 
+logger = create_logger(__name__)
 
 class CustomError(Exception):
     def __init__(self, status, message):
@@ -21,36 +22,24 @@ app = FastAPI()
 def home():
     return {"message": "Hello from FastAPI!", "time": get_current()}
 
-@app.get("/get_user")
-def get_user():
-    # 构造一个用户对象
-    user = user_pb2.User()
-    user.id = 1001
-    user.name = "Alice"
-    user.email = "alice@example.com"
-
-    # 序列化为二进制
-    serialized_data = user.SerializeToString()
-
-    # 返回 Protobuf 二进制数据
-    return Response(
-        content=serialized_data,
-        media_type="application/x-protobuf"
-    )
-
-@app.get("/sensor_data", response_class=Response)
-def get_sensor_data():
+@app.get("/get_full_sensor_data", response_class=Response)
+def get_full_sensor_data():
+    # 从本地文件读取出json
+    try:
+        with open('data/response.json', 'r') as f:
+            a = json.load(f)
+            logger.info(a)
+    except FileNotFoundError:
+        logger.info('No response.json')
     # 创建响应对象
-    response = sensor_data_pb2.SensorDataResponse()
+    response = sensor_history_pb2.SensorData()
+
 
     # 设置 sensors
-    response.sensors.extend(["-1", "0", "AJQT01SP001PT903A"])
+    response.sensors.extend(a['sensors'])
 
     # 添加 datas
-    for time_val, values in [
-        (1756260842, [(0, 8.0), (1, 10.0)]),
-        (1756260837, [(0, 3.0), (1, 5.0)])
-    ]:
+    for time_val, values in response['datas']:
         data_point = response.datas.add()
         data_point.time = time_val
         for idx, val in values:
