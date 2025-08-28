@@ -107,7 +107,7 @@ async def get_current_flow_data():
     except Exception as e:
         logger.error(e)
 
-@router.post("/predict/get_flow_history", summary="获取历史的 Flow 数据")
+@router.post("/get_flow_history", summary="获取历史的 Flow 数据")
 async def get_flow_history(queryBody: QueryBody):
     logger.info(f"queryBody: {queryBody}")
     try:
@@ -117,8 +117,9 @@ async def get_flow_history(queryBody: QueryBody):
     except Exception as e:
         logger.info(f"数据有问题")
 
-@router.get("/get_full_sensor_data",summary="获取历史 Sensor 数据", response_class=Response)
-def get_full_sensor_data():
+@router.post("/get_full_sensor_data",summary="获取历史 Sensor 数据", response_class=Response)
+def get_full_sensor_data(queryBody: QueryBody):
+    logger.info(f"queryBody: {queryBody}")
     # 从本地文件读取 JSON
     try:
         with open('data/sensor_history.json', 'r', encoding='utf-8') as f:
