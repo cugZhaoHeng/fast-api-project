@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package example;
+
+// 根消息
+message SensorDataResponse {
+  repeated string sensors = 1;     // 传感器 ID 列表
+  repeated DataPoint datas = 2;    // 时间序列数据
+}
+
+// 每个时间点的数据
+message DataPoint {
+  int64 time = 1;                  // 时间戳（秒）
+  repeated SensorValue data = 2;   // 该时间点各传感器的值
+}
+
+// 单个传感器值
+message SensorValue {
+  int32 index = 1;                 // 传感器索引
+  double val = 2;                  // 传感器值
+}

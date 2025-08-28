@@ -10,24 +10,15 @@
 6. 随机抽样节点评估（雷达图、柱状图）
 7. 总体评估热力图
 """
-import csv
 import os
 import json
-import zipfile
-from io import BytesIO, StringIO
+from io import BytesIO
 
-import pandas as pd
-import torch
-import numpy as np
-from datetime import datetime, timedelta
 import re
-import matplotlib.pyplot as plt
-import random
 import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from matplotlib.colors import LinearSegmentedColormap
 from starlette.responses import StreamingResponse
-from utils.logger import create_logger
+from logger import create_logger
 
 
 logger = create_logger(__name__)
