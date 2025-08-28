@@ -11,21 +11,23 @@
 7. 总体评估热力图
 """
 import os
+import sys
+
+from common_class import QueryBody
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))  # 添加上一级目录
 import json
 from io import BytesIO
-
 import re
 import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException
-from starlette.responses import StreamingResponse
+from starlette.responses import StreamingResponse, Response
 from utils.logger import create_logger
-
+import sensor_history_pb2
 
 logger = create_logger(__name__)
-router = APIRouter(prefix="/predict", tags=["origin_dataset"])
+router = APIRouter(prefix="/predict", tags=["pipeline"])
 xiaosong_data = []
-
-
 def parse_json_url(url):
     """
     从URL获取并解析可能格式不正确的JSON数据
@@ -85,16 +87,90 @@ def parse_json_url(url):
         logger.info(f"从URL获取数据失败: {e}")
         return []
 
-@router.get("/get_flow_hour")
+@router.get("/get_flow_hour", summary="获取当前 Flow 数据")
 async def get_current_flow_data():
-    logger.info(f"有人访问了get_flow_hour接口")
-    return parse_json_url("http://114.55.113.162:8084/shifan-data/flow_hour.json")
+    logger.info(f"有人访问了 get_flow_hour 接口")
+    try:
+        with open("./data/flow_hour.json", "r", encoding="utf-8") as f:
+            flow_hour = json.load(f)
+        return flow_hour
+    except Exception as e:
+        logger.error(e)
 
-@router.get("/get_sensor")
+@router.get("/get_sensor", summary="获取当前 Sensor 数据")
 async def get_current_flow_data():
-    return parse_json_url("http://114.55.113.162:8084/shifan-data/sensor.json")
+    logger.info(f"有人访问了 get_sensor 接口")
+    try:
+        with open("./data/sensor.json", "r", encoding="utf-8") as f:
+            sensor_data = json.load(f)
+        return sensor_data
+    except Exception as e:
+        logger.error(e)
 
-@router.post("/process_csv/")
+@router.post("/predict/get_flow_history", summary="获取历史的 Flow 数据")
+async def get_flow_history(queryBody: QueryBody):
+    logger.info(f"queryBody: {queryBody}")
+    try:
+        with open("./data/flow_history.json", "r", encoding="utf-8") as f:
+            flow_history = json.load(f)
+        return flow_history
+    except Exception as e:
+        logger.info(f"数据有问题")
+
+@router.get("/get_full_sensor_data",summary="获取历史 Sensor 数据", response_class=Response)
+def get_full_sensor_data():
+    # 从本地文件读取 JSON
+    try:
+        with open('data/sensor_history.json', 'r', encoding='utf-8') as f:
+            a = json.load(f)
+            logger.info("成功读取 JSON 数据", )
+    except FileNotFoundError:
+        logger.error("文件未找到: data/sensor_history.json")
+        return Response(content="", status_code=404, media_type="application/json")
+    except json.JSONDecodeError as e:
+        logger.error("JSON 解析错误: %s", e)
+        return Response(content="", status_code=500, media_type="application/json")
+    except Exception as e:
+        logger.error("读取文件时发生未知错误: %s", e)
+        return Response(content="", status_code=500, media_type="application/json")
+
+    # 创建 Protobuf 响应对象
+    response = sensor_history_pb2.SensorData()
+
+    # 设置 sensors
+    if 'sensors' in a:
+        response.sensors.extend(a['sensors'])
+    else:
+        logger.warning("JSON 中缺少 'sensors' 字段")
+
+    # 添加 datas
+    if 'datas' in a:
+        for record in a['datas']:  # 遍历 datas 列表中的每个记录
+            data_record = response.datas.add()  # 创建一个新的 DataRecord
+            data_record.time = record.get('time', 0)  # 获取时间戳
+
+            # 添加 data 点
+            for point in record.get('data', []):  # 遍历 data 列表
+                data_point = data_record.data.add()  # 创建一个新的 DataPoint
+                data_point.index = point.get('index', 0)
+                data_point.val = float(point.get('val', 0.0))  # 确保是 float
+    else:
+        logger.warning("JSON 中缺少 'datas' 字段")
+
+    # 序列化为二进制
+    try:
+        serialized_data = response.SerializeToString()
+    except Exception as e:
+        logger.error("Protobuf 序列化失败: %s", e)
+        return Response(content="", status_code=500, media_type="application/json")
+
+    # 返回 Protobuf 数据
+    return Response(
+        content=serialized_data,
+        media_type="application/x-protobuf"
+    )
+
+@router.post("/process_csv/", summary="数据预测接口")
 async def process_csv_endpoint(file: UploadFile = File(...)):
     """
     接收上传的 CSV 文件，打印内容，然后返回本地的 processed_files.zip 文件。
