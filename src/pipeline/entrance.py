@@ -22,40 +22,66 @@ app = FastAPI()
 def home():
     return {"message": "Hello from FastAPI!", "time": get_current()}
 
+import json
+from fastapi import FastAPI, Response
+import logging
+import sensor_history_pb2  # 确保已生成
+
+app = FastAPI()
+logger = logging.getLogger(__name__)
+
 @app.get("/get_full_sensor_data", response_class=Response)
 def get_full_sensor_data():
-    # 从本地文件读取出json
+    # 从本地文件读取 JSON
     try:
-        with open('data/response.json', 'r') as f:
+        with open('data/response.json', 'r', encoding='utf-8') as f:
             a = json.load(f)
-            logger.info(a)
+            logger.info("成功读取 JSON 数据", )
     except FileNotFoundError:
-        logger.info('No response.json')
-    # 创建响应对象
+        logger.error("文件未找到: data/response.json")
+        return Response(content="", status_code=404, media_type="application/json")
+    except json.JSONDecodeError as e:
+        logger.error("JSON 解析错误: %s", e)
+        return Response(content="", status_code=500, media_type="application/json")
+    except Exception as e:
+        logger.error("读取文件时发生未知错误: %s", e)
+        return Response(content="", status_code=500, media_type="application/json")
+
+    # 创建 Protobuf 响应对象
     response = sensor_history_pb2.SensorData()
 
-
     # 设置 sensors
-    response.sensors.extend(a['sensors'])
+    if 'sensors' in a:
+        response.sensors.extend(a['sensors'])
+    else:
+        logger.warning("JSON 中缺少 'sensors' 字段")
 
     # 添加 datas
-    for time_val, values in response['datas']:
-        data_point = response.datas.add()
-        data_point.time = time_val
-        for idx, val in values:
-            sv = data_point.data.add()
-            sv.index = idx
-            sv.val = val
+    if 'datas' in a:
+        for record in a['datas']:  # 遍历 datas 列表中的每个记录
+            data_record = response.datas.add()  # 创建一个新的 DataRecord
+            data_record.time = record.get('time', 0)  # 获取时间戳
+
+            # 添加 data 点
+            for point in record.get('data', []):  # 遍历 data 列表
+                data_point = data_record.data.add()  # 创建一个新的 DataPoint
+                data_point.index = point.get('index', 0)
+                data_point.val = float(point.get('val', 0.0))  # 确保是 float
+    else:
+        logger.warning("JSON 中缺少 'datas' 字段")
 
     # 序列化为二进制
-    serialized_data = response.SerializeToString()
+    try:
+        serialized_data = response.SerializeToString()
+    except Exception as e:
+        logger.error("Protobuf 序列化失败: %s", e)
+        return Response(content="", status_code=500, media_type="application/json")
 
     # 返回 Protobuf 数据
     return Response(
         content=serialized_data,
         media_type="application/x-protobuf"
     )
-
 # 这行一定要放在上面，至少要在通用拦截之前
 app.include_router(main_api.router)
 
