@@ -26,11 +26,10 @@ from typing import List
 import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException
 from starlette.responses import StreamingResponse, Response
-from utils.logger import create_logger
 import sensor_history_pb2
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse
-from logger import create_logger
+from utils.logger import create_logger
 
 
 logger = create_logger(__name__)
@@ -242,7 +241,7 @@ import struct
 
 # 当前文件目录 + 本地 ZIP 文件路径
 current_dir = os.path.dirname(__file__)
-ZIP_FILE_PATH = os.path.join(current_dir, "processed_files.zip")
+ZIP_FILE_PATH = os.path.join(current_dir, "data/processed_files.zip")
 
 # ========== 请求模型 ==========
 class ProcessCSVRequest(BaseModel):
