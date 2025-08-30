@@ -1,11 +1,17 @@
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '../..'))  # 添加上一级目录
+
 from datetime import datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.responses import JSONResponse, Response
 
+from utils.logger import create_logger
 import main_api
 
+logger = create_logger(__name__)
 
 class CustomError(Exception):
     def __init__(self, status, message):
@@ -18,10 +24,16 @@ app = FastAPI()
 def home():
     return {"message": "Hello from FastAPI!", "time": get_current()}
 
+import json
+from fastapi import FastAPI, Response
+import logging
+import sensor_history_pb2  # 确保已生成
+
+app = FastAPI()
+
+
 # 这行一定要放在上面，至少要在通用拦截之前
 app.include_router(main_api.router)
-
-
 
 # 设置允许的源、方法和头部信息
 origins = ["*"]
@@ -34,17 +46,12 @@ app.add_middleware(
     allow_headers=["*"],  # 允许的头部列表，'*' 表示所有头部
 )
 
-
 @app.exception_handler(CustomError)
 async def custom_error_handler(request, exc):
     return JSONResponse(
         status_code=exc.status,
         content=vars(exc)
     )
-
-
-
-
 
 def get_current():
     """
@@ -53,8 +60,8 @@ def get_current():
     """
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-
 if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=6112)
+    logger.info(f"程序启动成功")
