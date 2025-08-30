@@ -10,13 +10,18 @@
 6. 随机抽样节点评估（雷达图、柱状图）
 7. 总体评估热力图
 """
+import csv
+import io
 import os
 import json
 from io import BytesIO
 
 import re
+from typing import List
+
 import requests
 from fastapi import APIRouter, UploadFile, File, HTTPException
+from pydantic import BaseModel
 from starlette.responses import StreamingResponse
 from logger import create_logger
 
@@ -151,5 +156,94 @@ async def process_csv_endpoint(file: UploadFile = File(...)):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"处理请求时出错: {str(e)}")
+import zipfile
+import output_pb2
+import struct
+
+# 当前文件目录 + 本地 ZIP 文件路径
+current_dir = os.path.dirname(__file__)
+ZIP_FILE_PATH = os.path.join(current_dir, "processed_files.zip")
+
+# ========== 请求模型 ==========
+class ProcessCSVRequest(BaseModel):
+    headers: List[str]
+    data: List[List[str]]
+
+@router.post("/process_json/")
+async def process_csv_endpoint(request: ProcessCSVRequest):
+    """
+    测试接口：
+    - 接收 JSON 数据（不处理）
+    - 读取本地 processed_files.zip
+    - 解压并解析每个 CSV 文件
+    - 流式返回 Protobuf 消息（带长度前缀）
+    """
+    # ========== 可选：打印收到的 JSON（仅测试用）==========
+    print(f"Received JSON - Headers: {request.headers}")
+    print(f"Data rows: {len(request.data)}")
+
+    # ========== 检查本地 ZIP 文件是否存在 ==========
+    if not os.path.exists(ZIP_FILE_PATH):
+        raise HTTPException(status_code=500, detail=f"本地 ZIP 文件不存在: {ZIP_FILE_PATH}")
+
+    # ========== 流式生成器：读 ZIP → 解 CSV → 输出 Protobuf ==========
+    def protobuf_stream():
+        with zipfile.ZipFile(ZIP_FILE_PATH, 'r') as z:
+            for fname in z.namelist():
+                # 跳过目录或非 CSV
+                if fname.endswith('/') or not fname.lower().endswith('.csv'):
+                    continue
+
+                try:
+                    # 读取并解码 CSV 内容
+                    with z.open(fname) as f:
+                        content = f.read().decode('utf-8')
+
+                    csv_file = io.StringIO(content)
+                    reader = csv.reader(csv_file)
+                    all_rows = list(reader)
+
+                    if not all_rows:
+                        print(f"跳过空文件: {fname}")
+                        continue
+
+                    headers = all_rows[0]
+                    data_rows = all_rows[1:]
+
+                    # 构造 Protobuf 消息
+                    pb_msg = output_pb2.PredictionOutput()
+                    pb_msg.filename = os.path.basename(fname)
+                    pb_msg.headers.extend(headers)
+
+                    for row in data_rows:
+                        pb_row = pb_msg.data.add()
+                        pb_row.values.extend(row)
+
+                    # ✅ 使用 SerializeToString() 序列化
+                    serialized = pb_msg.SerializeToString()  # 返回 bytes
+
+                    # 加上 4 字节长度前缀（大端）
+                    prefix = struct.pack('>I', len(serialized))
+                    yield prefix + serialized
+
+                    print(f"已发送: {fname}, 数据行数: {len(data_rows)}")
+
+                except Exception as e:
+                    print(f"处理文件失败: {fname}, 错误: {e}")
+                    # 可选：发送错误消息
+                    error_msg = output_pb2.PredictionOutput()
+                    error_msg.filename = fname
+                    error_msg.headers.append("error")
+                    err_row = error_msg.data.add()
+                    err_row.values.append(f"Parse error: {str(e)}")
+                    serialized = error_msg.SerializeToString()
+                    prefix = struct.pack('>I', len(serialized))
+                    yield prefix + serialized
+
+    # ========== 返回流（Protobuf 格式）==========
+    return StreamingResponse(
+        content=protobuf_stream(),
+        media_type="application/x-protobuf"
+    )
 
    

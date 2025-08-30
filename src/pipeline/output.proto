@@ -1,0 +1,12 @@
+// output.proto
+syntax = "proto3";
+
+message PredictionOutput {
+  string filename = 1;
+  repeated string headers = 2;
+  repeated Row data = 3;
+}
+
+message Row {
+  repeated string values = 1;
+}
