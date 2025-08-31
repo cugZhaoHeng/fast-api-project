@@ -4,7 +4,7 @@ import struct
 import output_pb2
 
 # ================== 配置 ==================
-API_URL = "http://127.0.0.1:6112/predict/process_json/"
+API_URL = "http://114.55.113.162:6112/predict/process_json/"
 JSON_DATA = {
     "headers": ["col1", "col2"],
     "data": [["input_row1_val1", "input_row1_val2"]]
