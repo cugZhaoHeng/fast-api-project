@@ -98,7 +98,7 @@ def parse_json_url(url):
 async def get_current_flow_data():
     logger.info(f"有人访问了 get_flow_hour 接口")
     try:
-        with open("./data/flow_hour.json", "r", encoding="utf-8") as f:
+        with open("data/flow_hour.json", "r", encoding="utf-8") as f:
             flow_hour = json.load(f)
         return flow_hour
     except Exception as e:
@@ -108,7 +108,7 @@ async def get_current_flow_data():
 async def get_current_flow_data():
     logger.info(f"有人访问了 get_sensor 接口")
     try:
-        with open("./data/sensor.json", "r", encoding="utf-8") as f:
+        with open("data/sensor.json", "r", encoding="utf-8") as f:
             sensor_data = json.load(f)
         return sensor_data
     except Exception as e:
@@ -118,7 +118,7 @@ async def get_current_flow_data():
 async def get_flow_history(queryBody: QueryBody):
     logger.info(f"queryBody: {queryBody}")
     try:
-        with open("./data/flow_history.json", "r", encoding="utf-8") as f:
+        with open("data/flow_history.json", "r", encoding="utf-8") as f:
             flow_history = json.load(f)
         return flow_history
     except Exception as e:
@@ -133,7 +133,7 @@ def get_full_sensor_data(queryBody: QueryBody):
             a = json.load(f)
             logger.info("成功读取 JSON 数据", )
     except FileNotFoundError:
-        logger.error("文件未找到: data/sensor_history.json")
+        logger.error("文件未找到: data/sensor_history.json.bak")
         return Response(content="", status_code=404, media_type="application/json")
     except json.JSONDecodeError as e:
         logger.error("JSON 解析错误: %s", e)
