@@ -248,8 +248,8 @@ class ProcessCSVRequest(BaseModel):
     headers: List[str]
     data: List[List[str]]
 
-@router.post("/process_json/")
-async def process_csv_endpoint(request: ProcessCSVRequest):
+@router.post("/process_json/", summary="数据预测接口，接收JSON")
+async def process_json_endpoint(request: ProcessCSVRequest):
     """
     测试接口：
     - 接收 JSON 数据（不处理）
@@ -269,6 +269,7 @@ async def process_csv_endpoint(request: ProcessCSVRequest):
     def protobuf_stream():
         with zipfile.ZipFile(ZIP_FILE_PATH, 'r') as z:
             for fname in z.namelist():
+                logger.info(f"处理文件：{fname}")
                 # 跳过目录或非 CSV
                 if fname.endswith('/') or not fname.lower().endswith('.csv'):
                     continue
@@ -288,13 +289,15 @@ async def process_csv_endpoint(request: ProcessCSVRequest):
 
                     headers = all_rows[0]
                     data_rows = all_rows[1:]
-
+                    logger.info(f"headers的长度: {len(headers)}")
+                    logger.info(f"data_rows的长度: {len(data_rows)}")
                     # 构造 Protobuf 消息
                     pb_msg = output_pb2.PredictionOutput()
                     pb_msg.filename = os.path.basename(fname)
                     pb_msg.headers.extend(headers)
 
                     for row in data_rows:
+                        logger.info(f"row的长度： {len(row)}")
                         pb_row = pb_msg.data.add()
                         pb_row.values.extend(row)
 
