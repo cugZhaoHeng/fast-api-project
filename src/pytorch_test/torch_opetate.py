@@ -7,6 +7,7 @@ x = x.reshape(3,12)
 x = x.reshape(-1)
 x = x.view(-1, 4)
 print(x)
+print(x.float().mean().item())
 
 # y = torch.range(1, 10, step=1)
 # print(y)

@@ -46,7 +46,7 @@ class NeuralNetwork(nn.Module):
 
 def train():
     net = NeuralNetwork()
-    net.to(torch.device('cuda'))
+    # net.to(torch.device('cuda'))
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     optimizer = torch.optim.Adam(net.parameters(), lr=0.001)
@@ -86,8 +86,25 @@ def train():
 
 def test():
     with open(file="model.pth", mode='rb') as f:
-        module = torch.load(f=f)
-        print(module)
+        module = torch.load(f=f, map_location=torch.device('cpu'))
+        test_dataset = torchvision.datasets.MNIST(root="../../data", train=False, transform=transforms.ToTensor(), download=False)
+        test_dataloader = DataLoader(dataset=test_dataset, batch_size=8, shuffle=False)
+        print(f"test_dataloader type: {type(test_dataloader)}")
+
+        model: NeuralNetwork = NeuralNetwork()
+        model.load_state_dict(state_dict=module)
+        model.eval()
+        print(f"model: {model}")
+
+        with torch.no_grad():
+            for images, labels in test_dataloader:
+                print(f"images shape: {images.shape}")
+                print(f"labels: {labels}")
+                pred = model.forward(images)
+                print(f"pred: {pred}")
+                print(f"max index: {torch.max(pred, 1)}")
+                break
 
 if __name__ == '__main__':
+    # train()
     test()
