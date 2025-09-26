@@ -9,6 +9,8 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 import numpy as np
+from utils.logger import create_logger
+logger = create_logger(__name__)
 
 # 1. 定义 VAE 模型
 class VAE(nn.Module):
@@ -68,7 +70,10 @@ transform = transforms.Compose([
     # transforms.Normalize((0.5,), (0.5,)) # VAE通常不进行标准化，因为输出是sigmoid，范围是0-1
 ])
 
-train_dataset = datasets.MNIST(root='/data', train=True, transform=transform, download=False)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+data_dir = os.path.join(current_dir, '../../data')
+logger.info(f"Data directory: {data_dir}")
+train_dataset = datasets.MNIST(root=data_dir, train=True, transform=transform, download=False)
 train_loader = DataLoader(dataset=train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
 # 5. 实例化模型、优化器
