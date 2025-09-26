@@ -39,7 +39,7 @@ class PermeabilityDataset(Dataset):
 
 
 # 示例：假设你有文件名列表
-npy_file_dir: str = r"D:\temp\npy_files"
+npy_file_dir: str = r"../../data/npy_files"
 file_list = os.listdir(npy_file_dir)
 dataset = PermeabilityDataset(data_dir=npy_file_dir, file_list=file_list)
 dataloader = DataLoader(dataset, batch_size=8, shuffle=False)  # 小 batch，3D 数据大
@@ -151,27 +151,42 @@ def train(epoch):
 # -----------------------------------
 # 5. 生成新河道模型
 # -----------------------------------
-def generate_model():
+def generate_new_model(model, latent_dim=64, device='cuda'):
+    """
+    随机生成一个全新的 3D 渗透率模型
+    """
     model.eval()
-    with torch.no_grad():
-        z = torch.randn(1, 64).to(device)  # 从标准正态采样
-        generated = model.decode(z)
-        generated = generated.cpu().squeeze().numpy()  # 转为 numpy array
+    with torch.no_grad():  # 不需要梯度
+        # Step 1: 从标准正态分布随机采样 z
+        z = torch.randn(1, latent_dim).to(device)  # shape: [1, 64]
+        logger.info(f"生成随机数：{z}")
+        # Step 2: 用解码器还原
+        generated = model.decode(z)  # 输出 shape: [1, 1, H, W, D]
 
-        # 如果之前做了 log 变换，这里要 exp 还原
-        # generated = np.exp(generated)
+        # Step 3: 转为 numpy，去掉 batch 和 channel 维度
+        generated = generated.cpu().squeeze().numpy()  # shape: [H, W, D]
 
         return generated
+
+def test():
+    # 现在加载训练好的模型
+    model1 = VAE3D(latent_dim=64).to(device)
+    model1.load_state_dict(torch.load('vae3d.pth'))
+    logger.info(f"模型加载成功： {model1}")
+    logger.info(f"开始生成模型")
+    model1.eval()  # 切换到评估模式（关闭 dropout 等）
+    new_permeability_model = generate_new_model(model, latent_dim=64)
+    return new_permeability_model
 
 
 # -----------------------------------
 # 6. 开始训练
 # -----------------------------------
 if __name__ == "__main__":
-    for epoch in range(1, 5):
-        train(epoch)
-    torch.save(model.state_dict(), "vae3d.pth")
-    logger.info(f"模型保存成功")
+    # for epoch in range(1, 5):
+    #     train(epoch)
+    # torch.save(model.state_dict(), "vae3d.pth")
+    # logger.info(f"模型保存成功")
         # if epoch % 10 == 0:
         #     print("Generating a new permeability model...")
         #     new_model = generate_model()
@@ -181,3 +196,6 @@ if __name__ == "__main__":
         #     plt.colorbar()
         #     plt.title(f"Generated Model - Slice at Z=25 (Epoch {epoch})")
         #     plt.show()
+
+    a = test()
+    print(a)

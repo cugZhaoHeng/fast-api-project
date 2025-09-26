@@ -3,6 +3,7 @@ import re
 import shutil
 import numpy as np
 from numpy import ndarray
+import matplotlib.pyplot as plt
 
 from utils.logger import create_logger
 
@@ -52,16 +53,22 @@ def read_inc_file(filepath: str) -> list[float]:
                         value_list.append(float(match))
     return value_list
 
-def save_npy(data_dir: str):
+def save_npy(data_dir: str, npy_dir: str):
     target_files: list[str] = os.listdir(data_dir)
     for index, filename in enumerate(target_files):
         logger.info(f"文件名： {filename} ")
         current_file: str = os.path.join(target_file_dir, filename)
         value_list: list[float] = read_inc_file(current_file)
         logger.info(f"当前模型的网格数量：{len(value_list)}")
-        value_array: ndarray = np.array(value_list, dtype=np.float32).reshape(16, 64, 64)
+        value_array: ndarray = np.array(value_list, dtype=np.float32).reshape(64, 64 ,16,  order='F')
         logger.info(value_array.shape)
 
+        logger.info(f"value_array: {value_array}")
+        logger.info(f"value_array[0]: {value_array[:,:,0]}")
+        plt.imshow(value_array[:,:,0])
+        plt.show()
+        plt.close()
+        break
         order_str = ""
         if 0 <= index < 10:
             order_str = "000" + str(index)
@@ -73,7 +80,7 @@ def save_npy(data_dir: str):
             order_str = str(index)
 
         current_filename = f"model_{order_str}.npy"
-        np.save(file=os.path.join(npy_file_dir, current_filename), arr=value_array)
+        np.save(file=os.path.join(npy_dir, current_filename), arr=value_array)
         logger.info(f"{current_filename}文件保存成功")
 
 
@@ -81,15 +88,18 @@ def save_npy(data_dir: str):
 if __name__ == '__main__':
     source_file_dir: str = r"D:\Software\tnavigator22.1\demo01.snf\HM_projects\AHM_Project_1.hmf\A001\INCLUDE"
     target_file_dir: str = r"D:\temp\model_data2"
-    npy_file_dir: str = r"D:\temp\npy_files"
+    npy_file_dir: str = r"../../data/npy_files_F"
     # copy_permx(source_file_dir, target_file_dir)
 
-    # save_npy(target_file_dir)
+    save_npy(data_dir=target_file_dir, npy_dir=npy_file_dir)
 
-    model_001 = np.load(os.path.join(npy_file_dir, "model_0001.npy"))
-    model_002 = np.load(os.path.join(npy_file_dir, "model_0002.npy"))
-    logger.info(f"model_001: {model_001}")
-    logger.info(f"model_002: {model_002}")
+    # model_001 = np.load(os.path.join(npy_file_dir, "model_0001.npy"))
+    # model_002 = np.load(os.path.join(npy_file_dir, "model_0002.npy"))
+    # logger.info(f"model_001: {model_001}")
+    # logger.info(f"model_002: {model_002}")
+
+
+
 
 
 
