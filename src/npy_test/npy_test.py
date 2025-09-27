@@ -9,16 +9,16 @@ from utils.logger import create_logger
 logger = create_logger(__name__)
 # 1.将3000个PERMX文件单独拷贝出来，到一个新的文件夹
 
-def copy_permx(source_dir: str, target_dir: str) -> None:
+def copy_permx(source_dir: str, target_dir: str, keyword: str="PERMX", suffix:str="inc") -> None:
     """
-    copy file from source_dir to target_dir
+    copy file from source_dir to target_dir, only for file that contains "PERMX", and end with suffix "inc"
     :param source_dir: 源文件夹
     :param target_dir: 目标文件夹
     :return: None
     """
     logger.info(f"正在拷贝文件，从 {source_dir} 到 {target_dir} ")
     all_files = os.listdir(source_dir)
-    all_files: list[str] = [f for f in all_files if f.endswith('.inc') and 'PERMX' in f]
+    all_files: list[str] = [f for f in all_files if f.endswith(suffix) and keyword in f]
     count: int = 1
     for filename in all_files:
         source_filepath = os.path.join(source_dir, filename)
@@ -26,6 +26,7 @@ def copy_permx(source_dir: str, target_dir: str) -> None:
         shutil.copyfile(source_filepath, target_filepath)
         count += 1
     logger.info(f"文件复制完成，共复制 {count} 个文件")
+
 # 匹配整数、浮点数、以及类似 "数字*数字" 的表达式
 pattern = r'\d+\.?\d*(?:\*\d+\.?\d*)?'
 def read_inc_file(filepath: str) -> list[float]:
