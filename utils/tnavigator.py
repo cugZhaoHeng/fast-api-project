@@ -97,10 +97,9 @@ if __name__ == '__main__':
     npy_file_dir: str = r"../data/npy_files"
     # copy_permx(source_file_dir, target_file_dir)
 
-    convert_inc_to_npy(data_dir=target_file_dir, npy_dir=npy_file_dir)
-    # save_npy(target_file_dir)
+    # convert_inc_to_npy(data_dir=target_file_dir, npy_dir=npy_file_dir)
 
-    # model_001 = np.load(os.path.join(npy_file_dir, "model_0001.npy"))
-    # model_002 = np.load(os.path.join(npy_file_dir, "model_0002.npy"))
-    # logger.info(f"model_001: {model_001}")
-    # logger.info(f"model_002: {model_002}")
+    model_001 = np.load(os.path.join(npy_file_dir, "model_0001.npy"))
+    model_002 = np.load(os.path.join(npy_file_dir, "model_0002.npy"))
+    logger.info(f"model_001: {model_001}")
+    logger.info(f"model_002: {model_002}")
