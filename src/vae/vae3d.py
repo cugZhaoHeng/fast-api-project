@@ -183,19 +183,9 @@ def test():
 # 6. 开始训练
 # -----------------------------------
 if __name__ == "__main__":
-    # for epoch in range(1, 5):
-    #     train(epoch)
-    # torch.save(model.state_dict(), "vae3d.pth")
-    # logger.info(f"模型保存成功")
-        # if epoch % 10 == 0:
-        #     print("Generating a new permeability model...")
-        #     new_model = generate_model()
-        #     np.save(f"generated_model_epoch_{epoch}.npy", new_model)
-        #     # 可视化某个切片
-        #     plt.imshow(new_model[:, :, 25], cmap='viridis')
-        #     plt.colorbar()
-        #     plt.title(f"Generated Model - Slice at Z=25 (Epoch {epoch})")
-        #     plt.show()
+    for epoch in range(1, 5):
+        train(epoch)
+    torch.save(model.state_dict(), "vae3d.pth")
 
-    a = test()
-    print(a)
+    # a = test()
+    # print(a)
