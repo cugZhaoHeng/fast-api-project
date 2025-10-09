@@ -1,6 +1,6 @@
 import logging
 import os
-
+from pathlib import Path
 from tqdm import tqdm
 
 # 在导入 torch 或 numpy 等库之前设置
@@ -16,6 +16,8 @@ import numpy as np
 from utils import logger
 log = logger.create_logger(__name__)
 log.setLevel(logging.INFO)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+log.info(f"PROJECT_ROOT: {PROJECT_ROOT}")
 
 # 1. 定义 VAE 模型
 class VAE(nn.Module):
@@ -170,5 +172,5 @@ def test():
         plt.close()
 
 if __name__ == '__main__':
-    # train()
-    test()
+    train()
+    # test()
