@@ -127,9 +127,13 @@ def test():
     with torch.no_grad():
         # 从标准正态分布中采样 Z_DIM 个随机向量
         sample = torch.randn(64, Z_DIM).to(DEVICE) # 生成64张图像
+        log.info(f"sample[0] shape: {sample[0].shape}")
+        log.info(f"sample[0]: {sample[0]}")
         generated_images = model1.decode(sample)
         generated_images = generated_images.cpu().numpy()
-        log.info(f"generated_images: {generated_images.shape}")
+
+        log.info(f"generated_images[0] shape: {generated_images[0].shape}")
+        log.info(f"generated_images[0]: {generated_images[0].reshape(28,28)}")
 
         fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(10, 10))
         for i in range(2):
@@ -164,20 +168,6 @@ def test():
                 axes[i, j].imshow(recon_test_images[i * 2 + j].reshape(28, 28), cmap='gray')
         plt.show()
         plt.close()
-
-
-        # recon_test_images = recon_test_images.cpu().view(64, 1, 28, 28) # 调整形状为 (batch, channel, H, W)
-        #
-        # fig, axes = plt.subplots(2, 2, figsize=(8, 8))
-        # for i, ax in enumerate(axes.flat):
-        #     if i < test_data.size(0) // 2:
-        #         ax.imshow(test_data[i].view(28, 28).cpu(), cmap='gray')
-        #         ax.axis('off')
-        #     else:
-        #         ax.imshow(recon_test_images[i - test_data.size(0) // 2].view(28, 28), cmap='gray')
-        #         ax.axis('off')
-        # plt.suptitle("Original (top) vs Reconstructed (bottom) Test Images")
-        # plt.show()
 
 if __name__ == '__main__':
     # train()

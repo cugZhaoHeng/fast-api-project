@@ -8,8 +8,19 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import os
 
+# 设置matplotlib中文字体（可选）
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"使用设备: {device}")
+
+# 创建保存结果的文件夹
+os.makedirs('results', exist_ok=True)
+os.makedirs('results/loss_curves', exist_ok=True)
+os.makedirs('results/generated_images', exist_ok=True)
+
+
 # 自定义数据集类 - 从新的npy文件加载（白色背景）
 class DFNDatasetWhiteBg(Dataset):
     def __init__(self, npy_file_path):
@@ -201,6 +212,92 @@ class ImprovedVAELoss(nn.Module):
         return total_loss, recon_loss, kl_loss
 
 
+# 绘制并保存损失曲线
+def plot_and_save_loss_curves(train_losses, recon_losses, kl_losses, epoch=None):
+    """绘制并保存损失曲线"""
+    plt.figure(figsize=(15, 5))
+
+    # 总损失
+    plt.subplot(1, 3, 1)
+    plt.plot(train_losses, 'b-', linewidth=2)
+    plt.title('总损失')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True, alpha=0.3)
+
+    # 重建损失
+    plt.subplot(1, 3, 2)
+    plt.plot(recon_losses, 'r-', linewidth=2)
+    plt.title('重建损失')
+    plt.xlabel('Epoch')
+    plt.ylabel('Reconstruction Loss')
+    plt.grid(True, alpha=0.3)
+
+    # KL损失
+    plt.subplot(1, 3, 3)
+    plt.plot(kl_losses, 'g-', linewidth=2)
+    plt.title('KL散度损失')
+    plt.xlabel('Epoch')
+    plt.ylabel('KL Loss')
+    plt.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+
+    # 保存图像
+    if epoch:
+        filename = f'results/loss_curves/loss_curves_epoch_{epoch}.png'
+    else:
+        filename = 'results/loss_curves/final_loss_curves.png'
+
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"损失曲线已保存为: {filename}")
+
+
+# 生成并显示样本的函数
+def generate_and_show_samples(model, num_samples=10, epoch=None, save=True):
+    model.eval()
+
+    with torch.no_grad():
+        # 从标准正态分布采样潜在向量
+        z = torch.randn(num_samples, model.latent_dim).to(device)
+
+        # 通过解码器生成新图像
+        generated_imgs = model.decoder(z)
+
+        # 转换为numpy数组
+        generated_imgs = generated_imgs.cpu().numpy()
+
+        # 显示生成的图像
+        fig, axes = plt.subplots(2, 5, figsize=(15, 6))
+        axes = axes.ravel()
+
+        for i in range(num_samples):
+            axes[i].imshow(generated_imgs[i, 0], cmap='gray', vmin=0, vmax=1)
+            title = f'生成样本 {i + 1}'
+            if epoch:
+                title += f' (Epoch {epoch})'
+            axes[i].set_title(title)
+            axes[i].axis('off')
+
+        plt.tight_layout()
+
+        # 保存图像
+        if save:
+            if epoch:
+                filename = f'results/generated_images/generated_samples_epoch_{epoch}.png'
+            else:
+                filename = 'results/generated_images/final_generated_samples.png'
+
+            plt.savefig(filename, dpi=300, bbox_inches='tight')
+            print(f"生成样本图像已保存为: {filename}")
+
+        plt.show()
+
+    model.train()
+    return generated_imgs
+
+
 # 改进的训练函数
 def train_improved_vae(model, dataloader, optimizer, scheduler, epochs=100):
     model.train()
@@ -256,52 +353,26 @@ def train_improved_vae(model, dataloader, optimizer, scheduler, epochs=100):
         print(
             f"Epoch {epoch + 1}/{epochs}, Loss: {avg_loss:.4f}, Recon: {avg_recon:.4f}, KL: {avg_kl:.4f}, LR: {current_lr:.2e}")
 
-        # 每20个epoch保存一次模型和生成示例
-        if (epoch + 1) % 20 == 0:
+        # 每20个epoch保存一次模型、损失曲线和生成示例
+        if (epoch + 1) % 20 == 0 or (epoch + 1) == epochs:
             # 保存模型
             torch.save({
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'loss': avg_loss
+                'loss': avg_loss,
+                'train_losses': train_losses,
+                'recon_losses': recon_losses,
+                'kl_losses': kl_losses
             }, f'improved_vae_white_epoch_{epoch + 1}.pth')
 
-            # 生成示例
-            generate_and_show_samples(model, num_samples=10, epoch=epoch + 1)
+            # 绘制并保存损失曲线
+            plot_and_save_loss_curves(train_losses, recon_losses, kl_losses, epoch=epoch + 1)
+
+            # 生成示例并保存
+            generate_and_show_samples(model, num_samples=10, epoch=epoch + 1, save=True)
 
     return train_losses, recon_losses, kl_losses
-
-
-# 生成并显示样本的函数
-def generate_and_show_samples(model, num_samples=10, epoch=None):
-    model.eval()
-
-    with torch.no_grad():
-        # 从标准正态分布采样潜在向量
-        z = torch.randn(num_samples, model.latent_dim).to(device)
-
-        # 通过解码器生成新图像
-        generated_imgs = model.decoder(z)
-
-        # 转换为numpy数组
-        generated_imgs = generated_imgs.cpu().numpy()
-
-        # 显示生成的图像
-        fig, axes = plt.subplots(2, 5, figsize=(15, 6))
-        axes = axes.ravel()
-
-        for i in range(num_samples):
-            axes[i].imshow(generated_imgs[i, 0], cmap='gray', vmin=0, vmax=1)
-            title = f'Generated {i + 1}'
-            if epoch:
-                title += f' (Epoch {epoch})'
-            axes[i].set_title(title)
-            axes[i].axis('off')
-
-        plt.tight_layout()
-        plt.show()
-
-    model.train()
 
 
 # 验证改进的VAE重建效果
@@ -326,15 +397,16 @@ def validate_improved_reconstruction(model, dataset, num_samples=10):
         for i in range(num_samples):
             # 原始图像
             axes[0, i].imshow(original_imgs_np[i, 0], cmap='gray', vmin=0, vmax=1)
-            axes[0, i].set_title(f'Original {i + 1}')
+            axes[0, i].set_title(f'原始样本 {i + 1}')
             axes[0, i].axis('off')
 
             # 重建图像
             axes[1, i].imshow(recon_imgs_np[i, 0], cmap='gray', vmin=0, vmax=1)
-            axes[1, i].set_title(f'Reconstructed {i + 1}')
+            axes[1, i].set_title(f'重建样本 {i + 1}')
             axes[1, i].axis('off')
 
         plt.tight_layout()
+        plt.savefig('results/reconstruction_comparison.png', dpi=300, bbox_inches='tight')
         plt.show()
 
         # 计算重建误差
@@ -370,10 +442,11 @@ def generate_high_quality_dfns(model, num_samples=10, temperature=1.0):
 
         for i in range(num_samples):
             axes[i].imshow(generated_imgs[i, 0], cmap='gray', vmin=0, vmax=1)
-            axes[i].set_title(f'High Quality DFN {i + 1}')
+            axes[i].set_title(f'高质量DFN {i + 1}')
             axes[i].axis('off')
 
         plt.tight_layout()
+        plt.savefig('results/high_quality_generated_dfns.png', dpi=300, bbox_inches='tight')
         plt.show()
 
         return generated_imgs
@@ -401,6 +474,7 @@ for i in range(10):
     ax.set_title(f'白底样本 {i + 1}')
     ax.axis('off')
 plt.tight_layout()
+plt.savefig('results/training_samples.png', dpi=300, bbox_inches='tight')
 plt.show()
 
 # 初始化改进的模型和优化器
@@ -424,28 +498,8 @@ train_losses_white, recon_losses_white, kl_losses_white = train_improved_vae(
     improved_vae_white, dataloader_white, optimizer_white, scheduler_white, epochs=100
 )
 
-# 绘制训练损失曲线
-plt.figure(figsize=(12, 4))
-plt.subplot(1, 3, 1)
-plt.plot(train_losses_white)
-plt.title('Total Loss (White BG)')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-
-plt.subplot(1, 3, 2)
-plt.plot(recon_losses_white)
-plt.title('Reconstruction Loss (White BG)')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-
-plt.subplot(1, 3, 3)
-plt.plot(kl_losses_white)
-plt.title('KL Loss (White BG)')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-
-plt.tight_layout()
-plt.show()
+# 绘制最终损失曲线
+plot_and_save_loss_curves(train_losses_white, recon_losses_white, kl_losses_white)
 
 # 验证改进的VAE重建效果（白色背景）
 print("验证改进的VAE重建效果（白色背景）...")
@@ -460,7 +514,10 @@ torch.save({
     'model_state_dict': improved_vae_white.state_dict(),
     'optimizer_state_dict': optimizer_white.state_dict(),
     'latent_dim': latent_dim,
-    'train_losses': train_losses_white
+    'train_losses': train_losses_white,
+    'recon_losses': recon_losses_white,
+    'kl_losses': kl_losses_white
 }, 'improved_vae_white_bg_final.pth')
 
 print("白色背景VAE模型已保存为 'improved_vae_white_bg_final.pth'")
+print("所有结果已保存在 'results' 文件夹中")

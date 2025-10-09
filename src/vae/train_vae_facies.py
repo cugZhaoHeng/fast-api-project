@@ -10,6 +10,7 @@ This script:
 - Saves model and generates new realizations
 """
 import os
+
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 import torch
 import torch.nn as nn
@@ -23,14 +24,14 @@ logger = create_logger(__name__)
 # -------------------------------
 # 配置参数
 # -------------------------------
-DATA_DIR = r"../../data/npy_files_F"          # 你的 .npy 文件目录
-SAVE_DIR = "./checkpoints_F"                  # 模型保存路径
+DATA_DIR = r"../../data/npy_files"  # 你的 .npy 文件目录
+SAVE_DIR = "./checkpoints"  # 模型保存路径
 os.makedirs(SAVE_DIR, exist_ok=True)
 
-INPUT_SHAPE = (16, 64, 64)                  # 模型尺寸
-LATENT_DIM = 64                             # 隐空间维度
-NUM_CLASSES = 3                             # 泥岩、砂岩、流体
-BATCH_SIZE = 4                              # 3D 数据大，batch 要小
+INPUT_SHAPE = (16, 64, 64)  # 模型尺寸
+LATENT_DIM = 64  # 隐空间维度
+NUM_CLASSES = 3  # 泥岩、砂岩、流体
+BATCH_SIZE = 4  # 3D 数据大，batch 要小
 LEARNING_RATE = 1e-4
 EPOCHS = 10
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -49,9 +50,9 @@ def to_onehot(facies_map):
     输出: (3, H, W, D)
     """
     label_map = np.zeros(facies_map.shape, dtype=np.int64)
-    label_map[facies_map == 0.1] = 0   # 泥岩
-    label_map[facies_map == 10]  = 1   # 砂岩
-    label_map[facies_map == 200] = 2   # 流体
+    label_map[facies_map == 0.1] = 0  # 泥岩
+    label_map[facies_map == 10] = 1  # 砂岩
+    label_map[facies_map == 200] = 2  # 流体
 
     onehot = np.eye(NUM_CLASSES)[label_map]  # -> (H, W, D, 3)
     onehot = np.transpose(onehot, (3, 0, 1, 2))  # -> (3, H, W, D)
@@ -74,7 +75,7 @@ class FaciesDataset(Dataset):
         data = np.load(path)  # shape: (16, 64, 64)
 
         # 转为 one-hot
-        data_onehot = to_onehot(data) # (3, 16, 64, 64)
+        data_onehot = to_onehot(data)  # (3, 16, 64, 64)
         logger.info(f"data_onehot: {data_onehot}")
         return torch.from_numpy(data_onehot).float()
 
@@ -173,9 +174,9 @@ def generate_facies_model(model, device=DEVICE, save_path=None):
 
         # 映射回原始值
         k_map = np.zeros_like(class_map, dtype=np.float32)
-        k_map[class_map == 0] = 0.1   # 泥岩
-        k_map[class_map == 1] = 10    # 砂岩
-        k_map[class_map == 2] = 200   # 流体
+        k_map[class_map == 0] = 0.1  # 泥岩
+        k_map[class_map == 1] = 10  # 砂岩
+        k_map[class_map == 2] = 200  # 流体
         print(k_map)
 
         if save_path:
@@ -202,9 +203,58 @@ def visualize_slice(model, slice_idx=8):
         plt.show()
 
 
-loss_list = []
 # -------------------------------
-# 7. 主训练函数
+# 7. 保存损失曲线
+# -------------------------------
+def save_loss_curve(loss_list, save_path):
+    """保存损失曲线图"""
+    plt.figure(figsize=(10, 6))
+    plt.plot(loss_list)
+    plt.title('Training Loss Curve')
+    plt.xlabel('Batch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"Loss curve saved to {save_path}")
+
+
+# -------------------------------
+# 8. 保存随机采样数据
+# -------------------------------
+def save_random_samples(model, num_samples=10, save_path="random_samples.txt"):
+    """保存随机采样并解码的数据到txt文件"""
+    model.eval()
+    samples = []
+
+    with torch.no_grad():
+        for i in range(num_samples):
+            z = torch.randn(1, LATENT_DIM).to(DEVICE)
+            prob_map = model.decode(z)
+            class_map = torch.argmax(prob_map, dim=1).cpu().squeeze().numpy()
+
+            # 映射回原始值
+            k_map = np.zeros_like(class_map, dtype=np.float32)
+            k_map[class_map == 0] = 0.1  # 泥岩
+            k_map[class_map == 1] = 10  # 砂岩
+            k_map[class_map == 2] = 200  # 流体
+
+            # 展平为一维数组
+            flat_data = k_map.flatten()
+            samples.append(flat_data)
+
+    # 保存到txt文件，每个样本占一行
+    with open(save_path, 'w') as f:
+        for sample in samples:
+            # 将每个元素转换为字符串并用空格分隔
+            line = '\n'.join(map(str, sample))
+            f.write(line + '\n')
+
+    print(f"Random samples saved to {save_path}")
+
+
+# -------------------------------
+# 9. 主训练函数
 # -------------------------------
 def train():
     # 数据集和加载器
@@ -216,6 +266,9 @@ def train():
     # 模型
     model = VAE3D_Facies().to(DEVICE)
     optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # 记录损失
+    loss_list = []
 
     # 训练循环
     for epoch in range(1, EPOCHS + 1):
@@ -233,20 +286,18 @@ def train():
             optimizer.step()
 
             train_loss += loss.item()
-            logger.info(f"train_loss:{train_loss}")
             loss_list.append(loss.item())
 
             if batch_idx % 10 == 0:
                 print(f'Epoch: {epoch} [{batch_idx * len(data)}/{len(dataset)}] '
                       f'Loss: {loss.item() / len(data):.4f}')
-            break
+
         avg_loss = train_loss / len(dataset)
         print(f'====> Epoch: {epoch} Average loss: {avg_loss:.4f}')
 
-
         # 每 20 个 epoch 生成一个模型看看
         if epoch % 20 == 0:
-            gen_path = f"./generated_F/generated_model_epoch_{epoch}.npy"
+            gen_path = f"./generated/generated_model_epoch_{epoch}.npy"
             os.makedirs("generated", exist_ok=True)
             generate_facies_model(model, save_path=gen_path)
             visualize_slice(model)
@@ -257,15 +308,16 @@ def train():
             torch.save(model.state_dict(), model_path)
             print(f"Model saved to {model_path}")
 
+    # 训练完成后保存损失曲线和随机采样数据
+    save_loss_curve(loss_list, "training_loss_curve.png")
+    save_random_samples(model, num_samples=10, save_path="random_samples.txt")
+
     print("✅ Training completed!")
-    plt.plot(loss_list)
-    plt.show()
-    plt.close()
     return model
 
 
 # -------------------------------
-# 8. 测试/生成函数
+# 10. 测试/生成函数
 # -------------------------------
 def test():
     model = VAE3D_Facies().to(DEVICE)
@@ -278,19 +330,68 @@ def test():
     model.load_state_dict(torch.load(model_path, map_location=DEVICE))
     print(f"✅ Model loaded from {model_path}")
 
-    # 生成 5 个新模型
+    # 生成 1 个新模型
     os.makedirs("generated", exist_ok=True)
-    for i in range(5):
-        path = f"generated_F/random_facies_model_{i+1:02d}.npy"
-        k_map = generate_facies_model(model, save_path=path)
-        print(f"Generated model {i+1}/5: {path}")
+    path = "generated/random_facies_model.npy"
+    k_map = generate_facies_model(model, save_path=path)
+    print(f"Generated model: {path}")
 
-    # 可视化一个
-    visualize_slice(model)
+    # 保存随机采样数据（只保存一个样本）
+    save_random_samples(model, num_samples=1, save_path="test_random_sample.txt")
+
+    # 可视化第一层
+    visualize_first_slice(model)
+
+
+def visualize_first_slice(model):
+    """可视化第一层切片"""
+    with torch.no_grad():
+        gen = generate_facies_model(model)
+        plt.figure(figsize=(8, 6))
+        # 显示第一层（索引0）
+        plt.imshow(gen[0, :, :], cmap='viridis', vmin=0, vmax=250)
+        plt.colorbar(label='Value')
+        plt.title('Generated Facies Model (First Slice)\n0.1=Mud, 10=Sand, 200=Fluid')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.savefig("generated/first_slice_visualization.png", dpi=300, bbox_inches='tight')
+        plt.show()
+        plt.close()
+
+
+def save_random_samples(model, num_samples=1, save_path="random_sample.txt"):
+    """保存随机采样并解码的数据到txt文件（只生成一个样本）"""
+    model.eval()
+    samples = []
+
+    with torch.no_grad():
+        for i in range(num_samples):
+            z = torch.randn(1, LATENT_DIM).to(DEVICE)
+            prob_map = model.decode(z)
+            class_map = torch.argmax(prob_map, dim=1).cpu().squeeze().numpy()
+
+            # 映射回原始值
+            k_map = np.zeros_like(class_map, dtype=np.float32)
+            k_map[class_map == 0] = 0.1  # 泥岩
+            k_map[class_map == 1] = 10  # 砂岩
+            k_map[class_map == 2] = 200  # 流体
+
+            # 展平为一维数组
+            flat_data = k_map.flatten()
+            samples.append(flat_data)
+
+    # 保存到txt文件，每个样本占一行
+    with open(save_path, 'w') as f:
+        for sample in samples:
+            # 将每个元素转换为字符串并用空格分隔
+            line = '\n'.join(map(str, sample))
+            f.write(line + '\n')
+
+    print(f"Random sample saved to {save_path}")
 
 
 # -------------------------------
-# 9. 主函数
+# 11. 主函数
 # -------------------------------
 if __name__ == "__main__":
     print("\n🚀 Starting VAE Training for Facies Modeling...\n")

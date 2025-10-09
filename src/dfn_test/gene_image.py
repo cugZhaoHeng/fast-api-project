@@ -8,8 +8,6 @@ import os
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"使用设备: {device}")
 
-
-# 白色背景DFN生成器
 class DFNGeneratorWhiteBackground:
     """离散裂缝网络生成器 - 白色背景，黑色裂缝"""
 

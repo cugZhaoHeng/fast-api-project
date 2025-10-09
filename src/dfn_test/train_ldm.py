@@ -13,6 +13,12 @@ import math
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"使用设备: {device}")
 
+# 创建保存结果的文件夹
+os.makedirs('results_ldm', exist_ok=True)
+os.makedirs('results_ldm/loss_curves', exist_ok=True)
+os.makedirs('results_ldm/denoising_process', exist_ok=True)
+os.makedirs('results_ldm/generated_images', exist_ok=True)
+
 
 # 首先，我们需要重新定义VAE模型结构（与第二部分相同）
 class ImprovedResNetBlock(nn.Module):
@@ -317,11 +323,19 @@ class LDMTrainer:
         return loss.item()
 
     @torch.no_grad()
-    def sample(self, num_samples=1, steps=100):
-        """从LDM生成样本"""
+    def sample(self, num_samples=1, steps=100, return_intermediates=False):
+        """从LDM生成样本，可选择返回中间过程"""
         self.unet.eval()
 
         z = torch.randn(num_samples, self.latent_dim, device=device)
+
+        # 如果要求返回中间过程，则记录关键步骤
+        intermediates = []
+        if return_intermediates:
+            # 记录初始噪声
+            with torch.no_grad():
+                initial_img = self.vae_model.decoder(z)
+            intermediates.append(("初始噪声", initial_img.cpu().numpy()))
 
         for i in tqdm(reversed(range(0, steps)), desc="采样"):
             t = torch.full((num_samples,), i, device=device, dtype=torch.long)
@@ -336,13 +350,73 @@ class LDMTrainer:
             )
 
             if i > 0:
+                # 添加噪声
                 sigma = torch.sqrt((1 - alpha_prev) / (1 - alpha) * (1 - alpha / alpha_prev))
                 z = z + sigma * torch.randn_like(z)
+
+            # 记录中间过程
+            if return_intermediates:
+                if i == steps * 2 // 3:  # 约2/3进度
+                    with torch.no_grad():
+                        mid_img1 = self.vae_model.decoder(z)
+                    intermediates.append(("去噪过程1", mid_img1.cpu().numpy()))
+                elif i == steps // 3:  # 约1/3进度
+                    with torch.no_grad():
+                        mid_img2 = self.vae_model.decoder(z)
+                    intermediates.append(("去噪过程2", mid_img2.cpu().numpy()))
 
         with torch.no_grad():
             generated_images = self.vae_model.decoder(z)
 
-        return generated_images.cpu().numpy()
+        if return_intermediates:
+            intermediates.append(("去噪完成", generated_images.cpu().numpy()))
+            return generated_images.cpu().numpy(), intermediates
+        else:
+            return generated_images.cpu().numpy()
+
+
+# 绘制并保存损失曲线
+def plot_and_save_loss_curves(losses, epoch=None):
+    """绘制并保存损失曲线"""
+    plt.figure(figsize=(10, 6))
+    plt.plot(losses, 'b-', linewidth=2)
+    plt.title('LDM训练损失')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True, alpha=0.3)
+
+    # 保存图像
+    if epoch:
+        filename = f'results_ldm/loss_curves/ldm_loss_epoch_{epoch}.png'
+    else:
+        filename = 'results_ldm/loss_curves/final_ldm_loss.png'
+
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.close()
+    print(f"LDM损失曲线已保存为: {filename}")
+
+
+# 可视化去噪过程
+def visualize_denoising_process(intermediates, epoch=None):
+    """可视化去噪过程"""
+    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+    for i, (title, img_array) in enumerate(intermediates):
+        axes[i].imshow(img_array[0, 0], cmap='gray', vmin=0, vmax=1)
+        axes[i].set_title(title)
+        axes[i].axis('off')
+
+    plt.tight_layout()
+
+    # 保存图像
+    if epoch:
+        filename = f'results_ldm/denoising_process/denoising_epoch_{epoch}.png'
+    else:
+        filename = 'results_ldm/denoising_process/final_denoising.png'
+
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
+    plt.show()
+    print(f"去噪过程图像已保存为: {filename}")
 
 
 # 训练LDM模型
@@ -365,14 +439,26 @@ def train_ldm(trainer, dataloader, epochs=100):
 
         print(f"Epoch {epoch + 1}/{epochs}, Loss: {avg_loss:.6f}")
 
-        if (epoch + 1) % 10 == 0:
+        # 每10个epoch保存模型、损失曲线和生成示例
+        if (epoch + 1) % 10 == 0 or (epoch + 1) == epochs:
+            # 保存模型
             torch.save({
                 'epoch': epoch,
                 'unet_state_dict': trainer.unet.state_dict(),
                 'optimizer_state_dict': trainer.optimizer.state_dict(),
-                'loss': avg_loss
+                'loss': avg_loss,
+                'train_losses': losses
             }, f'ldm_model_white_epoch_{epoch + 1}.pth')
 
+            # 绘制并保存损失曲线
+            plot_and_save_loss_curves(losses, epoch=epoch + 1)
+
+            # 生成去噪过程示例
+            print("生成去噪过程示例...")
+            _, intermediates = trainer.sample(num_samples=1, steps=100, return_intermediates=True)
+            visualize_denoising_process(intermediates, epoch=epoch + 1)
+
+            # 生成普通样本
             generate_ldm_samples(trainer, num_samples=10, epoch=epoch + 1)
 
     return losses
@@ -388,14 +474,23 @@ def generate_ldm_samples(trainer, num_samples=10, epoch=None):
 
     for i in range(num_samples):
         axes[i].imshow(generated_images[i, 0], cmap='gray', vmin=0, vmax=1)
-        title = f'LDM Generated {i + 1}'
+        title = f'LDM生成 {i + 1}'
         if epoch:
             title += f' (Epoch {epoch})'
         axes[i].set_title(title)
         axes[i].axis('off')
 
     plt.tight_layout()
+
+    # 保存图像
+    if epoch:
+        filename = f'results_ldm/generated_images/ldm_samples_epoch_{epoch}.png'
+    else:
+        filename = 'results_ldm/generated_images/final_ldm_samples.png'
+
+    plt.savefig(filename, dpi=300, bbox_inches='tight')
     plt.show()
+    print(f"LDM生成样本已保存为: {filename}")
 
 
 # 批量生成DFN图像
@@ -419,10 +514,11 @@ def batch_generate_dfns(trainer, num_batches=10, batch_size=32):
 
     for i in range(10):
         axes[i].imshow(all_generated_images[i, 0], cmap='gray', vmin=0, vmax=1)
-        axes[i].set_title(f'Batch Generated {i + 1}')
+        axes[i].set_title(f'批量生成 {i + 1}')
         axes[i].axis('off')
 
     plt.tight_layout()
+    plt.savefig('results_ldm/batch_generated_dfns.png', dpi=300, bbox_inches='tight')
     plt.show()
 
     np.save('ldm_generated_dfns_white.npy', all_generated_images)
@@ -462,12 +558,13 @@ def validate_generated_dfns_statistics(generated_images, original_dataset, vae_m
         generated_2d = combined_2d[100:]
 
         plt.figure(figsize=(10, 8))
-        plt.scatter(original_2d[:, 0], original_2d[:, 1], alpha=0.7, label='Original')
-        plt.scatter(generated_2d[:, 0], generated_2d[:, 1], alpha=0.7, label='Generated')
+        plt.scatter(original_2d[:, 0], original_2d[:, 1], alpha=0.7, label='原始样本')
+        plt.scatter(generated_2d[:, 0], generated_2d[:, 1], alpha=0.7, label='生成样本')
         plt.title('潜在空间分布比较')
         plt.xlabel('PC1')
         plt.ylabel('PC2')
         plt.legend()
+        plt.savefig('results_ldm/latent_space_comparison.png', dpi=300, bbox_inches='tight')
         plt.show()
 
         print(f"潜在空间方差解释比例: {pca.explained_variance_ratio_.sum():.4f}")
@@ -486,9 +583,10 @@ def validate_generated_dfns_statistics(generated_images, original_dataset, vae_m
     for i in range(20):
         ax = axes[i // 5, i % 5]
         ax.imshow(generated_images[i, 0], cmap='gray', vmin=0, vmax=1)
-        ax.set_title(f'Generated DFN {i + 1}')
+        ax.set_title(f'生成DFN {i + 1}')
         ax.axis('off')
     plt.tight_layout()
+    plt.savefig('results_ldm/generated_dfns_grid.png', dpi=300, bbox_inches='tight')
     plt.show()
 
 
@@ -522,14 +620,13 @@ ldm_trainer_white = LDMTrainer(vae_model_white, latent_dim=128, timesteps=1000)
 print("开始训练LDM（白色背景）...")
 ldm_losses_white = train_ldm(ldm_trainer_white, dataloader_white, epochs=100)
 
-# 绘制训练损失曲线
-plt.figure(figsize=(10, 6))
-plt.plot(ldm_losses_white)
-plt.title('LDM Training Loss (White Background)')
-plt.xlabel('Epoch')
-plt.ylabel('Loss')
-plt.grid(True)
-plt.show()
+# 绘制最终损失曲线
+plot_and_save_loss_curves(ldm_losses_white)
+
+# 生成最终去噪过程示例
+print("生成最终去噪过程示例...")
+_, intermediates = ldm_trainer_white.sample(num_samples=1, steps=100, return_intermediates=True)
+visualize_denoising_process(intermediates)
 
 # 批量生成白色背景DFN图像
 print("批量生成白色背景DFN图像...")
@@ -549,3 +646,4 @@ torch.save({
 
 print("白色背景LDM模型已保存为 'ldm_model_white_bg_final.pth'")
 print("白色背景LDM训练和生成完成！")
+print("所有结果已保存在 'results_ldm' 文件夹中")
