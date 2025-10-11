@@ -17,10 +17,11 @@ logger = create_logger(__name__)
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 PARENT_DIR = Path(__file__).parent
 # 模型的保存位置
-model_dir = PROJECT_ROOT / "models"
+model_dir = PARENT_DIR / "models"
 image_dir = PARENT_DIR / "images"
 os.makedirs(image_dir, exist_ok=True)
 os.makedirs(model_dir, exist_ok=True)
+model_path = model_dir / "vae.pth"
 
 
 # 1. 定义 VAE 模型，这里需要搞清楚，h_dim和z_dim分别是什么含义
@@ -97,8 +98,26 @@ optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
 def train():
     loss_list = []
-    for epoch in range(NUM_EPOCHS):
-        logger.info(f"Epoch {epoch + 1}/{NUM_EPOCHS}")
+    start_epoch = 0
+    train_times = 0
+    # 这里需要做一个判断，判断是否有加载的模型
+    if os.path.exists(model_path):
+        # 获取上一次训练的检查点
+        check_point = torch.load(model_path, map_location=DEVICE)
+        logger.info(f"已存在训练的模型, epoch={check_point['epoch']}")
+        # 加载上一次训练的模型的权重
+        model.load_state_dict(check_point["model_state_dict"])
+        # 加载上一次训练模型的优化器
+        optimizer.load_state_dict(check_point["optimizer_state_dict"])
+        loss_list = check_point["train_losses"]
+        start_epoch = check_point["epoch"]
+        train_times = check_point["train_times"]
+    else:
+        logger.info(f"第一次训练模型")
+
+    for epoch in range(start_epoch, start_epoch + NUM_EPOCHS):
+        logger.info(f"Epoch {epoch + 1}/{start_epoch + NUM_EPOCHS}")
+        avg_loss = 0
         for batch_idx, (data, _) in enumerate(train_loader):
             data = data.to(DEVICE)
             recon_batch, mu, logvar = model(data)
@@ -106,52 +125,74 @@ def train():
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            loss_list.append(loss.item())
-        logger.info(f"Epoch [{epoch + 1}/{NUM_EPOCHS}], Loss: {loss_list[epoch]:.4f}")
-    model_path = model_dir / "mnist_model.pth"
+            # logger.info(f"batch_idx: {batch_idx}, loss: {loss.item()}")
+            avg_loss = (avg_loss * batch_idx + loss.item()) / (batch_idx + 1)
+            # logger.info(f"avg_loss: {avg_loss}")
+        logger.info(f"Epoch [{epoch + 1}/{start_epoch + NUM_EPOCHS}], Loss: {avg_loss:.2f}")
+        loss_list.append(avg_loss)
+
     # torch 在保存模型的时候，应当将模型的参数，运行的次数，以及损失函数都保存进去，而不是仅仅保存参数
     torch.save(model.state_dict(), f=model_path)
+    torch.save({
+                'epoch': start_epoch + NUM_EPOCHS,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'train_losses': loss_list,
+                'train_times': train_times + 1
+            }, f=model_path)
     logger.info(f"模型保存成功，位置：{model_path}")
     # 绘制损失函数的图片
-
+    plt.plot(loss_list)
+    plt.savefig(model_dir / "loss.png")
 
 
 def test():
+    # 获取上一次训练的检查点
+    check_point = torch.load(model_path, map_location=DEVICE)
+    current_epoch = check_point["epoch"]
+    logger.info(f"已存在训练的模型, epoch={check_point['epoch']}")
+    # 加载上一次训练的模型的权重
+    model.load_state_dict(check_point["model_state_dict"])
     model.eval()
     with torch.no_grad():
-        # 从标准正态分布中采样 Z_DIM 个随机向量
-        sample = torch.randn(64, Z_DIM).to(DEVICE)  # 生成64张图像
-        generated_images = model.decode(sample).cpu()
+        test_mode = input("请选择要测试的模式 (1) generate (2) compare：")
+        if test_mode == "generate":
+            # 从标准正态分布中采样 Z_DIM 个随机向量
+            sample = torch.randn(64, Z_DIM).to(DEVICE)  # 生成64张图像
+            generated_images = model.decode(sample).cpu()
 
-        # 可视化生成的图像
-        fig, axes = plt.subplots(8, 8, figsize=(8, 8))
-        for i, ax in enumerate(axes.flat):
-            if i < generated_images.size(0):
-                ax.imshow(generated_images[i].view(28, 28), cmap='gray')
-                ax.axis('off')
-        plt.suptitle("Generated Images")
-        plt.show()
+            # 可视化生成的图像
+            fig, axes = plt.subplots(8, 8, figsize=(8, 8))
+            for i, ax in enumerate(axes.flat):
+                if i < generated_images.size(0):
+                    ax.imshow(generated_images[i].view(28, 28), cmap='gray')
+                    ax.axis('off')
+            plt.suptitle(f"Generated Images epoch: {current_epoch}")
+            plt.savefig(model_dir / f"generated_image_{current_epoch}.png")
+            logger.info(f"图片生成完毕")
+        elif test_mode == "compare":
+            # 可视化重构图像
+            logger.info("\nReconstructing images from test set...")
+            # 随机取一些测试集图片进行重构
+            test_data, _ = next(iter(
+                DataLoader(datasets.MNIST(root='../../data', train=False, transform=transform, download=True),
+                           batch_size=64)))
+            test_data = test_data.to(DEVICE)
+            recon_test_images, _, _ = model(test_data)
+            recon_test_images = recon_test_images.cpu().view(64, 1, 28, 28)  # 调整形状为 (batch, channel, H, W)
 
-        # 可视化重构图像
-        print("\nReconstructing images from test set...")
-        # 随机取一些测试集图片进行重构
-        test_data, _ = next(iter(
-            DataLoader(datasets.MNIST(root='../../data', train=False, transform=transform, download=True),
-                       batch_size=64)))
-        test_data = test_data.to(DEVICE)
-        recon_test_images, _, _ = model(test_data)
-        recon_test_images = recon_test_images.cpu().view(64, 1, 28, 28)  # 调整形状为 (batch, channel, H, W)
-
-        fig, axes = plt.subplots(8, 8, figsize=(8, 8))
-        for i, ax in enumerate(axes.flat):
-            if i < test_data.size(0) // 2:
-                ax.imshow(test_data[i].view(28, 28).cpu(), cmap='gray')
-                ax.axis('off')
-            else:
-                ax.imshow(recon_test_images[i - test_data.size(0) // 2].view(28, 28), cmap='gray')
-                ax.axis('off')
-        plt.suptitle("Original (top) vs Reconstructed (bottom) Test Images")
-        plt.show()
+            fig, axes = plt.subplots(8, 8, figsize=(8, 8))
+            for i, ax in enumerate(axes.flat):
+                if i < test_data.size(0) // 2:
+                    ax.imshow(test_data[i].view(28, 28).cpu(), cmap='gray')
+                    ax.axis('off')
+                else:
+                    ax.imshow(recon_test_images[i - test_data.size(0) // 2].view(28, 28), cmap='gray')
+                    ax.axis('off')
+            plt.suptitle(f"Compare Image epoch: {current_epoch}")
+            plt.savefig(model_dir / f"compare_image_{current_epoch}.png")
+        else:
+            logger.error(f"输入错误")
 
 
 if __name__ == '__main__':
@@ -161,4 +202,4 @@ if __name__ == '__main__':
     elif mode == "test":
         test()
     else:
-        print("Please enter mode ('train' or 'test')")
+        logger.error("Please enter mode ('train' or 'test')")

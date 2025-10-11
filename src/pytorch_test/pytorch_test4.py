@@ -83,7 +83,7 @@ def train():
     torch.save(net.state_dict(), f'model_4.pth')
 
     plt.plot(loss_list)
-    plt.savefig("images/loss.png")
+    plt.savefig("images/loss1.png")
 
 
 def test():
