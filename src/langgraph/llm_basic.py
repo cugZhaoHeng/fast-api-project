@@ -10,6 +10,7 @@ from langchain_core.outputs import ChatResult, ChatGeneration
 from langchain_openai import ChatOpenAI
 from langchain_core.tools import tool
 from langgraph.prebuilt import create_react_agent
+from langgraph.graph import CompiledStateGraph
 import utils.json_util
 
 # llm_with_tool.py
@@ -137,7 +138,7 @@ def get_llm(
 # ----------------------------
 # 创建 Agent
 # ----------------------------
-def create_tool_agent(llm, tools):
+def create_tool_agent(llm, tools) -> CompiledStateGraph:
     return create_react_agent(llm, tools)
 
 
@@ -154,9 +155,10 @@ def run_agent(agent, user_input: str):
 # 主程序
 # ----------------------------
 if __name__ == "__main__":
-    llm = get_llm()
+    # ChatOpenAI这个class是langchain_openai库里的
+    llm:ChatOpenAI = get_llm()
     fixed_llm = FixToolCallsChatModel(base_llm=llm)
-    agent = create_tool_agent(fixed_llm, TOOLS)
+    agent: CompiledStateGraph = create_tool_agent(fixed_llm, TOOLS)
 
     question = "请用工具计算 123 + 456"
     print(f"👤 用户: {question}")

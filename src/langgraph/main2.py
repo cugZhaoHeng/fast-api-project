@@ -1,215 +1,233 @@
-from langgraph.prebuilt import create_react_agent
-from langchain_core.tools import tool
-from langchain.chat_models import init_chat_model
 import json
-from typing import Any, Dict, List, Optional
-from langchain_core.messages import AIMessage, ToolMessage
+import uuid
+import re
+from typing import Annotated, TypedDict, Any, List, Union
+from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, ToolMessage, AIMessage
+from langchain_core.outputs import ChatResult, ChatGeneration
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, START, END
+from langgraph.graph.message import add_messages
 
+# --- 1. 辅助函数：暴力清洗 JSON ---
+def ensure_dict(value: Union[str, dict]) -> dict:
+    """
+    不管传入什么，尽最大努力把它变成字典。
+    """
+    if isinstance(value, dict):
+        return value
+    
+    if not isinstance(value, str):
+        print(f"⚠️ [警告] 参数类型既不是 str 也不是 dict: {type(value)}")
+        return {}
 
-def _get(obj, key, default=None):
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
+    # 尝试 1: 直接解析
+    try:
+        parsed = json.loads(value)
+        if isinstance(parsed, dict):
+            return parsed
+        # 如果解析出来还是字符串（双重编码），再解一次
+        if isinstance(parsed, str):
+            try:
+                parsed_again = json.loads(parsed)
+                if isinstance(parsed_again, dict):
+                    return parsed_again
+            except:
+                pass
+    except json.JSONDecodeError:
+        pass
 
-def _msg_type(obj) -> Optional[str]:
-    t = _get(obj, "type") or _get(obj, "role")
-    if t is None:
-        cls_name = obj.__class__.__name__.lower()
-        if "human" in cls_name:
-            return "human"
-        if "ai" in cls_name or "assistant" in cls_name:
-            return "ai"
-        if "tool" in cls_name:
-            return "tool"
-    return t
+    # 尝试 2: 简单的单引号替换（针对某些不规范的本地模型）
+    try:
+        # 这是一个很粗糙的修复，但在 demo 中通常有效
+        fixed_value = value.replace("'", '"')
+        parsed = json.loads(fixed_value)
+        if isinstance(parsed, dict):
+            return parsed
+    except:
+        pass
 
-def _flatten_content(c):
-    if isinstance(c, list):
-        parts = []
-        for p in c:
-            if isinstance(p, dict):
-                if "text" in p:
-                    parts.append(str(p["text"]))
-                elif "content" in p:
-                    parts.append(str(p["content"]))
+    print(f"❌ [严重] 无法将参数转换为字典: {value}")
+    return {}
+
+# --- 2. 核弹级修复版 ChatOpenAI ---
+class FixedChatOpenAI(ChatOpenAI):
+    def _create_chat_result(self, response: dict, generation_info: dict = None) -> ChatResult:
+        # 兼容性处理：如果 response 是对象则转 dict
+        if not isinstance(response, dict) and hasattr(response, "model_dump"):
+            response = response.model_dump()
+
+        generations = []
+        
+        for res in response.get("choices", []):
+            message_dict = res.get("message", {})
+            content = message_dict.get("content", "")
+            
+            # 手动构建 tool_calls
+            tool_calls = []
+            
+            if "tool_calls" in message_dict and message_dict["tool_calls"]:
+                for raw_tc in message_dict["tool_calls"]:
+                    # 1. 确保 ID 存在
+                    tc_id = raw_tc.get("id") or f"call_{uuid.uuid4().hex[:8]}"
+                    
+                    # 2. 获取原始数据
+                    func_name = raw_tc.get("function", {}).get("name")
+                    args_raw = raw_tc.get("function", {}).get("arguments", "{}")
+                    
+                    # 3. 🚨 核心修复：强制转字典
+                    args_parsed = ensure_dict(args_raw)
+                    
+                    # 调试打印（如果在控制台看到这个，说明解析成功）
+                    # print(f"🔍 [Debug] 解析参数: {args_raw} -> {type(args_parsed)}")
+
+                    tool_calls.append({
+                        "name": func_name,
+                        "args": args_parsed, # 这里绝对是字典
+                        "id": tc_id,
+                        "type": "tool_call"
+                    })
+
+            # 4. 构造消息，显式传入 invalid_tool_calls=[] 避免触发验证逻辑
+            msg = AIMessage(
+                content=content if content else "",
+                tool_calls=tool_calls,
+                invalid_tool_calls=[], 
+            )
+
+            gen_info = dict(finish_reason=res.get("finish_reason"))
+            generations.append(ChatGeneration(message=msg, generation_info=gen_info))
+
+        return ChatResult(generations=generations, llm_output=response)
+
+# --- 3. 工具定义 ---
+@tool
+def get_weather(city: str):
+    """查询天气"""
+    return f"{city}正在下暴雨，气温10度。"
+
+@tool
+def recommend_food(weather: str):
+    """根据天气推荐食物"""
+    if "雨" in weather:
+        return "这种天气适合吃麻辣火锅。"
+    return "吃沙拉吧。"
+
+# --- 4. 配置 ---
+def get_llm():
+    return FixedChatOpenAI(
+        model="qwen2.5-instruct",
+        base_url="http://10.10.3.92:9998/v1",
+        api_key="dummy_key",
+        temperature=0.0,
+    )
+
+# --- 5. 节点逻辑 (保持你的逻辑) ---
+class State(TypedDict):
+    messages: Annotated[list[BaseMessage], add_messages]
+
+def weather_expert_node(state: State):
+    llm = get_llm()
+    # 禁用并行调用以提高稳定性
+    llm_with_tools = llm.bind_tools([get_weather], parallel_tool_calls=False)
+    
+    print("--- Weather Agent: 正在思考 ---")
+    response = llm_with_tools.invoke(state["messages"])
+    
+    # 构造返回列表
+    messages_to_return = [response]
+    
+    # 内部执行
+    if response.tool_calls:
+        print(f"--- Weather Agent: 内部执行工具 ({len(response.tool_calls)}) ---")
+        for tool_call in response.tool_calls:
+            if tool_call["name"] == "get_weather":
+                try:
+                    tool_result = get_weather.invoke(tool_call["args"])
+                    tool_msg = ToolMessage(
+                        content=str(tool_result),
+                        tool_call_id=tool_call["id"],
+                        name=tool_call["name"]
+                    )
+                    messages_to_return.append(tool_msg)
+                except Exception as e:
+                    print(f"⚠️ 工具执行出错: {e}")
+    
+    return {"messages": messages_to_return}
+
+def food_expert_node(state: State):
+    llm = get_llm()
+    llm_with_tools = llm.bind_tools([recommend_food], parallel_tool_calls=False)
+    
+    # 构建 Prompt，明确指示
+    prompt = SystemMessage(content="你是美食专家。请根据对话历史中的天气信息，调用工具推荐食物。")
+    print("--- Food Agent: 正在思考 ---")
+    
+    # 这里把 prompt 放在最前面
+    inputs = [prompt] + state["messages"]
+    response = llm_with_tools.invoke(inputs)
+    
+    messages_to_return = [response]
+    
+    if response.tool_calls:
+        print(f"--- Food Agent: 内部执行工具 ({len(response.tool_calls)}) ---")
+        for tool_call in response.tool_calls:
+            if tool_call["name"] == "recommend_food":
+                try:
+                    tool_result = recommend_food.invoke(tool_call["args"])
+                    tool_msg = ToolMessage(
+                        content=str(tool_result),
+                        tool_call_id=tool_call["id"],
+                        name=tool_call["name"]
+                    )
+                    messages_to_return.append(tool_msg)
+                except Exception as e:
+                    print(f"⚠️ 工具执行出错: {e}")
+                
+    return {"messages": messages_to_return}
+
+# --- 6. 运行 ---
+workflow = StateGraph(State)
+workflow.add_node("weather_expert", weather_expert_node)
+workflow.add_node("food_expert", food_expert_node)
+workflow.add_edge(START, "weather_expert")
+workflow.add_edge("weather_expert", "food_expert")
+workflow.add_edge("food_expert", END)
+
+app = workflow.compile()
+
+if __name__ == "__main__":
+    # --- 新增：生成流程图代码 ---
+    try:
+        # 获取图的 Mermaid 格式数据
+        graph_png = app.get_graph().draw_mermaid_png()
+        
+        # 将二进制数据写入图片文件
+        with open("agent_workflow.png", "wb") as f:
+            f.write(graph_png)
+        print("✅ 流程图已保存为 agent_workflow.png")
+    except Exception as e:
+        print(f"⚠️ 绘图失败 (可能需要安装依赖: pip install pygraphviz): {e}")
+        # 如果生成图片失败，打印 Mermaid 文本，你可以复制到在线编辑器
+        print("可以直接复制以下文本到 https://mermaid.live/ 查看:")
+        print(app.get_graph().draw_mermaid())
+    try:
+        print(">>> 开始执行工作流...")
+        result = app.invoke({"messages": [HumanMessage(content="查一下上海的天气，然后告诉我吃什么")]})
+        
+        print("\n====== 最终结果 ======")
+        for msg in result["messages"]:
+            if isinstance(msg, ToolMessage):
+                print(f"🔧 [工具结果]: {msg.content}")
+            elif isinstance(msg, AIMessage):
+                if msg.tool_calls:
+                    print(f"🤖 [AI ToolCall]: {msg.tool_calls[0]['name']} -> {msg.tool_calls[0]['args']}")
                 else:
-                    parts.append(str(p))
+                    print(f"🤖 [AI Reply]: {msg.content}")
             else:
-                parts.append(str(p))
-        return "\n".join(parts)
-    return c
-
-def _maybe_json_load(s):
-    if isinstance(s, str):
-        try:
-            return json.loads(s)
-        except Exception:
-            return s
-    return s
-
-def _parse_tool_calls_structured(ai_msg) -> List[Dict[str, Any]]:
-    """
-    同时兼容两种形态：
-      1) 规范化形态（AIMessage.tool_calls）：{'name': 'tool', 'args': {...}, 'id': ...}
-      2) OpenAI 原始形态（additional_kwargs/response_metadata）：
-         {'id': ..., 'function': {'name': ..., 'arguments': '...'}}
-    优先使用 ai_msg.tool_calls；若无则回退 additional_kwargs/response_metadata。
-    """
-    calls: List[Dict[str, Any]] = []
-
-    def add_from_list(lst):
-        if not lst:
-            return
-        for call in lst:
-            if not isinstance(call, dict):
-                continue
-            if "function" in call and isinstance(call["function"], dict):
-                # OpenAI 原始形态
-                func = call["function"]
-                name = func.get("name")
-                args = _maybe_json_load(func.get("arguments"))
-                cid = call.get("id")
-            else:
-                # 规范化形态
-                name = call.get("name") or call.get("tool_name")
-                args = call.get("args")
-                if isinstance(args, str):
-                    args = _maybe_json_load(args)
-                if args is None and "arguments" in call:
-                    args = _maybe_json_load(call.get("arguments"))
-                cid = call.get("id") or call.get("tool_call_id")
-            calls.append({"id": cid, "name": name, "args": args})
-
-    # 1) 优先使用规范化的 AIMessage.tool_calls
-    tc_attr = _get(ai_msg, "tool_calls")
-    if tc_attr:
-        add_from_list(tc_attr)
-        return calls
-
-    # 2) 回退 additional_kwargs
-    ak = _get(ai_msg, "additional_kwargs", {}) or {}
-    add_from_list(ak.get("tool_calls"))
-
-    fc = ak.get("function_call")
-    if isinstance(fc, dict):
-        calls.append({
-            "id": None,
-            "name": fc.get("name"),
-            "args": _maybe_json_load(fc.get("arguments")),
-        })
-
-    # 3) 再回退 response_metadata
-    rm = _get(ai_msg, "response_metadata", {}) or {}
-    add_from_list(rm.get("tool_calls"))
-
-    fc2 = rm.get("function_call")
-    if isinstance(fc2, dict):
-        calls.append({
-            "id": None,
-            "name": fc2.get("name"),
-            "args": _maybe_json_load(fc2.get("arguments")),
-        })
-
-    return calls
-
-def parse_tool_steps(messages: List[Any]) -> List[Dict[str, Any]]:
-    """
-    逐个 AIMessage 建“窗口”：将该 AIMessage 的调用计划与其后、下一条 AIMessage 之前的
-    所有 ToolMessage 按顺序一一配对（不依赖 id）。这能修复同一 id 被复用导致的错配。
-    返回结构：[{index, tool_call_id, name, args, result}]
-    """
-    steps: List[Dict[str, Any]] = []
-
-    # 找到每个 AIMessage 的索引
-    ai_indices = [i for i, m in enumerate(messages) if isinstance(m, AIMessage) or _msg_type(m) == "ai"]
-    if not ai_indices:
-        # 没有 AIMessage，兜底把所有 ToolMessage 列出来
-        tool_msgs = [m for m in messages if isinstance(m, ToolMessage) or _msg_type(m) == "tool"]
-        for i, tm in enumerate(tool_msgs, start=1):
-            steps.append({
-                "index": i,
-                "tool_call_id": _get(tm, "tool_call_id"),
-                "name": _get(tm, "name"),
-                "args": None,
-                "result": _flatten_content(_get(tm, "content")),
-            })
-        return steps
-
-    # 逐个 AIMessage 建窗口
-    for ai_idx_pos, ai_idx in enumerate(ai_indices):
-        ai_msg = messages[ai_idx]
-        calls = _parse_tool_calls_structured(ai_msg)
-        if not calls:
-            continue  # 这个 AIMessage 没有工具调用计划
-
-        # 窗口右边界：下一条 AIMessage 的索引，否则到消息末尾
-        next_ai_idx = ai_indices[ai_idx_pos + 1] if (ai_idx_pos + 1) < len(ai_indices) else len(messages)
-
-        # 收集该窗口内的 ToolMessage（严格按出现顺序）
-        window_tool_msgs = []
-        for k in range(ai_idx + 1, next_ai_idx):
-            m = messages[k]
-            if isinstance(m, ToolMessage) or _msg_type(m) == "tool":
-                window_tool_msgs.append(m)
-
-        # 逐一顺序配对
-        pair_count = max(len(calls), len(window_tool_msgs))
-        for j in range(pair_count):
-            call = calls[j] if j < len(calls) else None
-            tm = window_tool_msgs[j] if j < len(window_tool_msgs) else None
-
-            steps.append({
-                "index": len(steps) + 1,
-                "tool_call_id": (_get(tm, "tool_call_id") if tm is not None else (call.get("id") if call else None)),
-                "name": (call.get("name") if call else _get(tm, "name")),
-                "args": (call.get("args") if call else None),
-                "result": (_flatten_content(_get(tm, "content")) if tm is not None else None),
-            })
-
-    # 兜底：如果完全没解析到调用计划但有 ToolMessage
-    if not steps:
-        tool_msgs = [m for m in messages if isinstance(m, ToolMessage) or _msg_type(m) == "tool"]
-        for i, tm in enumerate(tool_msgs, start=1):
-            steps.append({
-                "index": i,
-                "tool_call_id": _get(tm, "tool_call_id"),
-                "name": _get(tm, "name"),
-                "args": None,
-                "result": _flatten_content(_get(tm, "content")),
-            })
-
-    return steps
-
-
-@tool(description="加法工具，计算 a + b")
-def add(a: int, b: int) -> int:
-    # 若需普通加法改为：return a + b
-    return a + b + b
-
-
-# 初始化模型（替换为你的端点配置）
-model = init_chat_model(
-    model="qwen2.5-instruct",
-    model_provider="openai",
-    base_url="http://10.10.3.92:9998/v1",
-    api_key="dummy_key",
-    temperature=0.0,
-    timeout=None,
-)
-
-# 创建 ReAct agent（会在需要时自动执行 add）
-agent = create_react_agent(model, [add])
-
-# 运行一次示例
-result = agent.invoke({"messages": [{"role": "user", "content": "先用工具算 2+3，再用工具算 5+3"}]})
-messages = result["messages"]
-
-print(messages)
-print(len(messages))
-for i, m in enumerate(messages):
-    print(f"[{i}] {m}")
-
-steps = parse_tool_steps(messages)
-print("本次工具调用次数:", len(steps))
-for s in steps:
-    print(f"第{s['index']}次调用: 工具={s['name']} 参数={s['args']} 返回={s['result']}")
+                print(f"👤 [User]: {msg.content}")
+                
+    except Exception as e:
+        print(f"\n❌ 程序崩溃: {e}")
+        import traceback
+        traceback.print_exc()
