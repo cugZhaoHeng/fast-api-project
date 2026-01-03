@@ -1,6 +1,7 @@
 import json
 import uuid
 import re
+import os
 from typing import Annotated, TypedDict, Any, List, Union
 from langchain_core.messages import BaseMessage, SystemMessage, HumanMessage, ToolMessage, AIMessage
 from langchain_core.outputs import ChatResult, ChatGeneration
@@ -8,6 +9,18 @@ from langchain_core.tools import tool
 from langchain_openai import ChatOpenAI
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langsmith import Client
+from langsmith.run_helpers import traceable
+from http_utils import LoggingHTTPTransport, LoggingSyncHTTPTransport
+from loguru import logger
+import httpx
+
+os.environ["LANGCHAIN_TRACING_V2"] = "true"
+os.environ["LANGCHAIN_API_KEY"] = "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"
+os.environ["LANGCHAIN_PROJECT"] = "AI_ToolCall_Repair_Demo"
+
+client = Client()
+http_client = LoggingHTTPTransport()
 
 # --- 1. 辅助函数：暴力清洗 JSON ---
 def ensure_dict(value: Union[str, dict]) -> dict:
@@ -115,17 +128,50 @@ def recommend_food(weather: str):
 
 # --- 4. 配置 ---
 def get_llm():
-    return FixedChatOpenAI(
-        model="qwen2.5-instruct",
-        base_url="http://10.10.3.92:9998/v1",
-        api_key="dummy_key",
-        temperature=0.0,
+    logger.info("Loading FixedChatOpenAI model with HTTP logging...")
+    
+    # 1. 创建自定义的 HTTP Transport
+    transport = LoggingHTTPTransport()
+    
+    # 2. 使用 transport 创建 AsyncClient（关键步骤！）
+    async_http_client = httpx.AsyncClient(
+        transport=transport,
+        timeout=60.0,
+        limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
     )
+    
+    # 创建 HTTP 客户端
+    http_client = None
+    transport = LoggingSyncHTTPTransport()
+    
+    # 创建同步 HTTP 客户端
+    http_client = httpx.Client(
+        transport=transport,
+        timeout=httpx.Timeout(60.0),
+        limits=httpx.Limits(max_keepalive_connections=5, max_connections=10),
+        follow_redirects=True,
+    )
+    
+    # 3. 创建 LLM 实例，传入 async_http_client
+    llm = FixedChatOpenAI(
+        model="qwen2.5-instruct",
+        api_key="osfks",
+        base_url="http://10.10.3.92:9998/v1",
+        temperature=0.1,
+        max_tokens=32768,
+        http_client=async_http_client,  # ← 关键：传入 AsyncClient，不是 Transport
+        timeout=60.0,
+        max_retries=2,
+    )
+    
+    logger.info(f"模型加载成功: {llm.model_name}")
+    return llm
 
 # --- 5. 节点逻辑 (保持你的逻辑) ---
 class State(TypedDict):
     messages: Annotated[list[BaseMessage], add_messages]
 
+# @traceable(run_type="chain")
 def weather_expert_node(state: State):
     llm = get_llm()
     # 禁用并行调用以提高稳定性
@@ -155,6 +201,7 @@ def weather_expert_node(state: State):
     
     return {"messages": messages_to_return}
 
+# @traceable(run_type="chain")
 def food_expert_node(state: State):
     llm = get_llm()
     llm_with_tools = llm.bind_tools([recommend_food], parallel_tool_calls=False)
