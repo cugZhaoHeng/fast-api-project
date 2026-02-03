@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package pipeline.model;
+
+// option java_package = "com.baidu.pipeline.common.pojo.dto.model";
+// option java_outer_classname = "ModelFullParamProto";
+// option java_multiple_files = true;
+
+import "google/protobuf/struct.proto";
+
+message ModelFullParam {
+  ModelInputDTO control_point = 1;
+  repeated string input_key = 2;
+  map<string, FloatList> input_value = 3;
+  int32 period_forecast = 4;
+  repeated StationPredictDTO station_predict_dtos = 5;
+  repeated ModelOptimizeParamDTO model_optimize_param_dtos = 6;
+  string model_update_time = 7;
+  map<string, ModelUpdateParamList> model_update_param = 8;
+  int32 req_type = 9;
+}
+
+message ModelInputDTO {
+  repeated string headers = 1;
+  repeated StringList data = 2;
+}
+
+message StringList {
+  repeated string values = 1;
+}
+
+message FloatList {
+  repeated float values = 1;
+}
+
+message StationPredictDTO {
+  string station_id = 1;
+  double input_press = 2;
+  double output_press = 3;
+  int64 time = 4;
+}
+
+message ModelOptimizeParamDTO {
+  int32 request_source = 1;
+  string station_id = 2;
+  string name = 3;
+  int64 trigger_time = 4;
+  int32 type = 5;
+  google.protobuf.Value value = 6;
+  google.protobuf.Value threshold = 7;
+  string trigger_reason = 8;
+  string first_station_id = 9;
+  string second_station_id = 10;
+}
+
+message ModelUpdateParamList {
+  repeated StringStringMap entries = 1;
+}
+
+message StringStringMap {
+  map<string, string> values = 1;
+}

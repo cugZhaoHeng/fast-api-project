@@ -1,0 +1,81 @@
+syntax = "proto3";
+
+package pipeline.model;
+
+option java_package = "com.baidu.pipeline.common.pojo.dto.model";
+option java_outer_classname = "ModelFullParamProto";
+option java_multiple_files = true;
+
+import "google/protobuf/struct.proto";
+
+message ModelFullParam {
+  // JSON: "controlPoint": { "headers": [...], "data": [ [...], [...] ] }
+  ModelInputDTO control_point = 1;
+
+  // JSON: "inputKey": [...]
+  repeated string input_key = 2;
+
+  // JSON: "inputValue": { "2026/1/14 8:00:00": [1.0, 2.0, ...], ... }
+  // 用 ListValue 让 value 在 JSON 中直接是数组（不再出现 { "values": [...] } 包装）
+  map<string, google.protobuf.ListValue> input_value = 3;
+
+  // JSON: "periodForecast": 24
+  int32 period_forecast = 4;
+
+  repeated StationPredictDTO station_predict_dtos = 5;
+
+  repeated ModelOptimizeParamDTO model_optimize_param_dtos = 6;
+
+  // JSON: "modelUpdateTime": "..."
+  string model_update_time = 7;
+
+  // JSON: "modelUpdateParam": { "pipelineStore": [ { "pipelineId": "...", "value": "..." } ] }
+  ModelUpdateParam model_update_param = 8;
+
+  // JSON: "reqType": 2
+  int32 req_type = 9;
+}
+
+message ModelInputDTO {
+  // JSON: "headers": ["TIME", ...]
+  repeated string headers = 1;
+
+  // JSON: "data": [
+  //   ["2026/1/14 8:00:00", "9.6", "5804", ...],
+  //   ...
+  // ]
+  repeated google.protobuf.ListValue data = 2;
+}
+
+message ModelUpdateParam {
+  // JSON: "pipelineStore": [ { "pipelineId":"000", "value":"-500" } ]
+  repeated PipelineStoreItem pipeline_store = 1;
+}
+
+message PipelineStoreItem {
+  // JSON: "pipelineId": "000"
+  string pipeline_id = 1;
+
+  // JSON: "value": "-500"
+  string value = 2;
+}
+
+message StationPredictDTO {
+  string station_id = 1;
+  double input_press = 2;
+  double output_press = 3;
+  int64 time = 4;
+}
+
+message ModelOptimizeParamDTO {
+  int32 request_source = 1;
+  string station_id = 2;
+  string name = 3;
+  int64 trigger_time = 4;
+  int32 type = 5;
+  google.protobuf.Value value = 6;
+  google.protobuf.Value threshold = 7;
+  string trigger_reason = 8;
+  string first_station_id = 9;
+  string second_station_id = 10;
+}

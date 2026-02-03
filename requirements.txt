@@ -1,21 +1,9 @@
-html5lib~=1.1
-selenium~=4.24.0
-torch~=2.5.1+cu118
-torchvision~=0.20.1+cu118
-matplotlib~=3.9.3
-pillow~=11.0.0
-numpy~=1.23.5
-shapely~=2.0.6
-requests~=2.32.3
-bleach~=6.2.0
-beautifulsoup4~=4.12.3
-diffusers~=0.32.2
-huggingface-hub~=0.30.1
-datasets~=2.16.1
-tqdm~=4.67.1
-ipython~=8.27.0
-torchaudio~=2.5.1+cu118
-responses~=0.25.7
-pandas~=2.2.3
-webdriver-manager~=4.0.2
-lxml~=6.0.0
+# requirements.txt
+# 指定阿里云镜像源
+-i https://mirrors.aliyun.com/pypi/simple/
+--trusted-host mirrors.aliyun.com
+
+# 项目依赖包
+fastapi~=0.95.2
+uvicorn~=0.22.0
+protobuf~=3.20.3
