@@ -1,6 +1,12 @@
 import os
 import sys
+import time
 from typing import List, Tuple
+from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).parent.parent
+CURRENT_DIR = Path(__file__).parent
+print(f"项目根目录: {PROJECT_ROOT}")
 
 def parse_zcorn_data(file_path: str) -> List[float]:
     """
@@ -176,6 +182,10 @@ def compare_data_files(file1_path: str, file2_path: str, output_path: str,
     try:
         with open(output_path, 'w', encoding='utf-8') as output_file:
             # 写入文件信息
+            # 写入时间节点, 格式 yyyy-mm-dd hh:mm:ss
+            timestamp = os.path.getmtime(file1_path)
+            formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(timestamp))
+            output_file.write(f"时间节点: {formatted_time}\n")
             output_file.write(f"文件比较结果\n")
             output_file.write(f"=" * 80 + "\n\n")
             output_file.write(f"文件1: {file1_path}\n")
@@ -237,10 +247,11 @@ if __name__ == "__main__":
     
     try:
         # 创建测试文件
-        property_name = "poro"
-        file1_path = rf"D:\git\fast-api-project\src\tnavigator_test\{property_name}-grdecl.inc"
-        file2_path = rf"D:\git\fast-api-project\src\tnavigator_test\{property_name}-tna.inc"
-        output_path = rf"D:\git\fast-api-project\src\tnavigator_test\{property_name}-comparison-result2.txt"
+        property_name = "ntg"
+        file1_path = CURRENT_DIR / f"{property_name}" / f"{property_name}-grdecl.inc"
+        file2_path = CURRENT_DIR / f"{property_name}" / f"{property_name}-tna.inc"
+        output_path = CURRENT_DIR / f"{property_name}" / f"{property_name}-comparison-result.txt"
+        os.makedirs(output_path.parent, exist_ok=True)
         
         # 比较文件
         result = compare_data_files(file1_path, file2_path, output_path, threshold=0.0001)
@@ -253,7 +264,3 @@ if __name__ == "__main__":
         
     except Exception as e:
         print(f"测试过程中出错: {e}")
-    
-    print("\n" + "=" * 60)
-    print("示例2: 使用实际文件")
-    print("=" * 60)

@@ -25,7 +25,7 @@ _sym_db = _symbol_database.Default()
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14pipeline_model.proto\x12\x0epipeline.model\x1a\x1cgoogle/protobuf/struct.proto\"\xfc\x03\n\x0eModelFullParam\x12\x34\n\rcontrol_point\x18\x01 \x01(\x0b\x32\x1d.pipeline.model.ModelInputDTO\x12\x11\n\tinput_key\x18\x02 \x03(\t\x12\x43\n\x0binput_value\x18\x03 \x03(\x0b\x32..pipeline.model.ModelFullParam.InputValueEntry\x12\x17\n\x0fperiod_forecast\x18\x04 \x01(\x05\x12?\n\x14station_predict_dtos\x18\x05 \x03(\x0b\x32!.pipeline.model.StationPredictDTO\x12H\n\x19model_optimize_param_dtos\x18\x06 \x03(\x0b\x32%.pipeline.model.ModelOptimizeParamDTO\x12\x19\n\x11model_update_time\x18\x07 \x01(\t\x12<\n\x12model_update_param\x18\x08 \x01(\x0b\x32 .pipeline.model.ModelUpdateParam\x12\x10\n\x08req_type\x18\t \x01(\x05\x1aM\n\x0fInputValueEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.ListValue:\x02\x38\x01\"J\n\rModelInputDTO\x12\x0f\n\x07headers\x18\x01 \x03(\t\x12(\n\x04\x64\x61ta\x18\x02 \x03(\x0b\x32\x1a.google.protobuf.ListValue\"M\n\x10ModelUpdateParam\x12\x39\n\x0epipeline_store\x18\x01 \x03(\x0b\x32!.pipeline.model.PipelineStoreItem\"7\n\x11PipelineStoreItem\x12\x13\n\x0bpipeline_id\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"`\n\x11StationPredictDTO\x12\x12\n\nstation_id\x18\x01 \x01(\t\x12\x13\n\x0binput_press\x18\x02 \x01(\x01\x12\x14\n\x0coutput_press\x18\x03 \x01(\x01\x12\x0c\n\x04time\x18\x04 \x01(\x03\"\x94\x02\n\x15ModelOptimizeParamDTO\x12\x16\n\x0erequest_source\x18\x01 \x01(\x05\x12\x12\n\nstation_id\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x14\n\x0ctrigger_time\x18\x04 \x01(\x03\x12\x0c\n\x04type\x18\x05 \x01(\x05\x12%\n\x05value\x18\x06 \x01(\x0b\x32\x16.google.protobuf.Value\x12)\n\tthreshold\x18\x07 \x01(\x0b\x32\x16.google.protobuf.Value\x12\x16\n\x0etrigger_reason\x18\x08 \x01(\t\x12\x18\n\x10\x66irst_station_id\x18\t \x01(\t\x12\x19\n\x11second_station_id\x18\n \x01(\tBA\n(com.baidu.pipeline.common.pojo.dto.modelB\x13ModelFullParamProtoP\x01\x62\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x14pipeline_model.proto\x12\x0epipeline.model\x1a\x1cgoogle/protobuf/struct.proto\"\xee\x03\n\x0eModelFullParam\x12\x33\n\x0c\x63ontrolPoint\x18\x01 \x01(\x0b\x32\x1d.pipeline.model.ModelInputDTO\x12\x10\n\x08inputKey\x18\x02 \x03(\t\x12\x42\n\ninputValue\x18\x03 \x03(\x0b\x32..pipeline.model.ModelFullParam.InputValueEntry\x12\x16\n\x0eperiodForecast\x18\x04 \x01(\x05\x12=\n\x12stationPredictDtos\x18\x05 \x03(\x0b\x32!.pipeline.model.StationPredictDTO\x12\x45\n\x16modelOptimizeParamDtos\x18\x06 \x03(\x0b\x32%.pipeline.model.ModelOptimizeParamDTO\x12\x17\n\x0fmodelUpdateTime\x18\x07 \x01(\t\x12:\n\x10modelUpdateParam\x18\x08 \x01(\x0b\x32 .pipeline.model.ModelUpdateParam\x12\x0f\n\x07reqType\x18\t \x01(\x05\x1aM\n\x0fInputValueEntry\x12\x0b\n\x03key\x18\x01 \x01(\t\x12)\n\x05value\x18\x02 \x01(\x0b\x32\x1a.google.protobuf.ListValue:\x02\x38\x01\"J\n\rModelInputDTO\x12\x0f\n\x07headers\x18\x01 \x03(\t\x12(\n\x04\x64\x61ta\x18\x02 \x03(\x0b\x32\x1a.google.protobuf.ListValue\"L\n\x10ModelUpdateParam\x12\x38\n\rpipelineStore\x18\x01 \x03(\x0b\x32!.pipeline.model.PipelineStoreItem\"6\n\x11PipelineStoreItem\x12\x12\n\npipelineId\x18\x01 \x01(\t\x12\r\n\x05value\x18\x02 \x01(\t\"]\n\x11StationPredictDTO\x12\x11\n\tstationId\x18\x01 \x01(\t\x12\x12\n\ninputPress\x18\x02 \x01(\x01\x12\x13\n\x0boutputPress\x18\x03 \x01(\x01\x12\x0c\n\x04time\x18\x04 \x01(\x03\"\x8c\x02\n\x15ModelOptimizeParamDTO\x12\x15\n\rrequestSource\x18\x01 \x01(\x05\x12\x11\n\tstationId\x18\x02 \x01(\t\x12\x0c\n\x04name\x18\x03 \x01(\t\x12\x13\n\x0btriggerTime\x18\x04 \x01(\x03\x12\x0c\n\x04type\x18\x05 \x01(\x05\x12%\n\x05value\x18\x06 \x01(\x0b\x32\x16.google.protobuf.Value\x12)\n\tthreshold\x18\x07 \x01(\x0b\x32\x16.google.protobuf.Value\x12\x15\n\rtriggerReason\x18\x08 \x01(\t\x12\x16\n\x0e\x66irstStationId\x18\t \x01(\t\x12\x17\n\x0fsecondStationId\x18\n \x01(\tBA\n(com.baidu.pipeline.common.pojo.dto.modelB\x13ModelFullParamProtoP\x01\x62\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -36,17 +36,17 @@ if not _descriptor._USE_C_DESCRIPTORS:
   _globals['_MODELFULLPARAM_INPUTVALUEENTRY']._loaded_options = None
   _globals['_MODELFULLPARAM_INPUTVALUEENTRY']._serialized_options = b'8\001'
   _globals['_MODELFULLPARAM']._serialized_start=71
-  _globals['_MODELFULLPARAM']._serialized_end=579
-  _globals['_MODELFULLPARAM_INPUTVALUEENTRY']._serialized_start=502
-  _globals['_MODELFULLPARAM_INPUTVALUEENTRY']._serialized_end=579
-  _globals['_MODELINPUTDTO']._serialized_start=581
-  _globals['_MODELINPUTDTO']._serialized_end=655
-  _globals['_MODELUPDATEPARAM']._serialized_start=657
-  _globals['_MODELUPDATEPARAM']._serialized_end=734
-  _globals['_PIPELINESTOREITEM']._serialized_start=736
-  _globals['_PIPELINESTOREITEM']._serialized_end=791
-  _globals['_STATIONPREDICTDTO']._serialized_start=793
-  _globals['_STATIONPREDICTDTO']._serialized_end=889
-  _globals['_MODELOPTIMIZEPARAMDTO']._serialized_start=892
-  _globals['_MODELOPTIMIZEPARAMDTO']._serialized_end=1168
+  _globals['_MODELFULLPARAM']._serialized_end=565
+  _globals['_MODELFULLPARAM_INPUTVALUEENTRY']._serialized_start=488
+  _globals['_MODELFULLPARAM_INPUTVALUEENTRY']._serialized_end=565
+  _globals['_MODELINPUTDTO']._serialized_start=567
+  _globals['_MODELINPUTDTO']._serialized_end=641
+  _globals['_MODELUPDATEPARAM']._serialized_start=643
+  _globals['_MODELUPDATEPARAM']._serialized_end=719
+  _globals['_PIPELINESTOREITEM']._serialized_start=721
+  _globals['_PIPELINESTOREITEM']._serialized_end=775
+  _globals['_STATIONPREDICTDTO']._serialized_start=777
+  _globals['_STATIONPREDICTDTO']._serialized_end=870
+  _globals['_MODELOPTIMIZEPARAMDTO']._serialized_start=873
+  _globals['_MODELOPTIMIZEPARAMDTO']._serialized_end=1141
 # @@protoc_insertion_point(module_scope)

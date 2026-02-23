@@ -10,30 +10,30 @@ import "google/protobuf/struct.proto";
 
 message ModelFullParam {
   // JSON: "controlPoint": { "headers": [...], "data": [ [...], [...] ] }
-  ModelInputDTO control_point = 1;
+  ModelInputDTO controlPoint = 1;
 
   // JSON: "inputKey": [...]
-  repeated string input_key = 2;
+  repeated string inputKey = 2;
 
   // JSON: "inputValue": { "2026/1/14 8:00:00": [1.0, 2.0, ...], ... }
   // 用 ListValue 让 value 在 JSON 中直接是数组（不再出现 { "values": [...] } 包装）
-  map<string, google.protobuf.ListValue> input_value = 3;
+  map<string, google.protobuf.ListValue> inputValue = 3;
 
   // JSON: "periodForecast": 24
-  int32 period_forecast = 4;
+  int32 periodForecast = 4;
 
-  repeated StationPredictDTO station_predict_dtos = 5;
+  repeated StationPredictDTO stationPredictDtos = 5;
 
-  repeated ModelOptimizeParamDTO model_optimize_param_dtos = 6;
+  repeated ModelOptimizeParamDTO modelOptimizeParamDtos = 6;
 
   // JSON: "modelUpdateTime": "..."
-  string model_update_time = 7;
+  string modelUpdateTime = 7;
 
   // JSON: "modelUpdateParam": { "pipelineStore": [ { "pipelineId": "...", "value": "..." } ] }
-  ModelUpdateParam model_update_param = 8;
+  ModelUpdateParam modelUpdateParam = 8;
 
   // JSON: "reqType": 2
-  int32 req_type = 9;
+  int32 reqType = 9;
 }
 
 message ModelInputDTO {
@@ -49,33 +49,33 @@ message ModelInputDTO {
 
 message ModelUpdateParam {
   // JSON: "pipelineStore": [ { "pipelineId":"000", "value":"-500" } ]
-  repeated PipelineStoreItem pipeline_store = 1;
+  repeated PipelineStoreItem pipelineStore = 1;
 }
 
 message PipelineStoreItem {
   // JSON: "pipelineId": "000"
-  string pipeline_id = 1;
+  string pipelineId = 1;
 
   // JSON: "value": "-500"
   string value = 2;
 }
 
 message StationPredictDTO {
-  string station_id = 1;
-  double input_press = 2;
-  double output_press = 3;
+  string stationId = 1;
+  double inputPress = 2;
+  double outputPress = 3;
   int64 time = 4;
 }
 
 message ModelOptimizeParamDTO {
-  int32 request_source = 1;
-  string station_id = 2;
+  int32 requestSource = 1;
+  string stationId = 2;
   string name = 3;
-  int64 trigger_time = 4;
+  int64 triggerTime = 4;
   int32 type = 5;
   google.protobuf.Value value = 6;
   google.protobuf.Value threshold = 7;
-  string trigger_reason = 8;
-  string first_station_id = 9;
-  string second_station_id = 10;
+  string triggerReason = 8;
+  string firstStationId = 9;
+  string secondStationId = 10;
 }
