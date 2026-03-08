@@ -1,0 +1,9 @@
+# requirements.txt
+# 指定清华大学镜像源，来下载cuda版本的torch
+-i https://mirrors.tuna.tsinghua.edu.cn/pytorch-wheels/cu118
+--trusted-host mirrors.tuna.tsinghua.edu.cn
+
+# 项目依赖包 
+torch
+torchvision
+torchaudio

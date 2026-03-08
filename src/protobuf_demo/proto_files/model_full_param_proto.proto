@@ -1,0 +1,107 @@
+syntax = "proto3";
+
+package pipeline.model;
+
+option java_package = "com.baidu.pipeline.common.pojo.proto.model";
+option java_outer_classname = "ModelFullParamProtoFile";
+option java_multiple_files = true;
+
+import "google/protobuf/struct.proto";
+
+// 模型完整参数
+message ModelFullParamProto {
+  // 控制点
+  ModelInputProto controlPoint = 1;
+
+  // 输入数据key
+  repeated string inputKey = 2;
+
+  // 输入数据value: Map<String, List<Float>>
+  map<string, FloatList> inputValue = 3;
+
+  // 预测周期
+  int32 periodForecast = 4;
+
+  // 业务数据-报警数据
+  repeated StationPredictProto stationPredictProtos = 5;
+
+  // 预警请求参数详情
+  repeated ModelOptimizeParamProto modelOptimizeParamProtos = 6;
+
+  // 人工模型调整参数-当前时间
+  string modelUpdateTime = 7;
+
+  // 模型更新参数: Map<String, List<Map<String, String>>>
+  // 使用ListValue，解析后自行处理内部结构
+  map<string, google.protobuf.ListValue> modelUpdateParam = 8;
+
+  // 请求类型: 1-代理模型返回, 2-发送给优化算法预测请求, 3-发送给优化算法预测请求
+  int32 reqType = 9;
+}
+
+// Float列表(用于inputValue的value)
+message FloatList {
+  repeated float values = 1;
+}
+
+// 模型输入
+message ModelInputProto {
+  // 请求头
+  repeated string headers = 1;
+
+  // 模型输入: List<List<String>>
+  repeated StringList data = 2;
+}
+
+// 字符串列表(用于data的嵌套List)
+message StringList {
+  repeated string values = 1;
+}
+
+// 场站预测数据
+message StationPredictProto {
+  // 场站编号
+  string stationId = 1;
+
+  // 进口压力
+  double inputPress = 2;
+
+  // 出口压力
+  double outputPress = 3;
+
+  // 时间
+  int64 time = 4;
+}
+
+// 模型优化参数详情
+message ModelOptimizeParamProto {
+  // 请求来源：1-代理模型，2-前端人工触发，3-ics报警
+  int32 requestSource = 1;
+
+  // 场站编号，标准编码
+  string stationId = 2;
+
+  // 名称
+  string name = 3;
+
+  // 触发产生时间(单位秒)
+  int64 triggerTime = 4;
+
+  // 参数类型：1-压力，2-流量，3-压缩机启停，4-管存，5-功率
+  int32 type = 5;
+
+  // value (Object类型用Value表示)
+  google.protobuf.Value value = 6;
+
+  // 调整参考值，可空
+  google.protobuf.Value threshold = 7;
+
+  // 触发原因
+  string triggerReason = 8;
+
+  // 场站1 标准编码
+  string firstStationId = 9;
+
+  // 场站2 标准编码
+  string secondStationId = 10;
+}
