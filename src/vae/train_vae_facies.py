@@ -51,8 +51,8 @@ def to_onehot(facies_map):
     """
     label_map = np.zeros(facies_map.shape, dtype=np.int64)
     label_map[facies_map == 0.1] = 0  # 泥岩
-    label_map[facies_map == 10] = 1  # 砂岩
-    label_map[facies_map == 200] = 2  # 流体
+    label_map[facies_map == 10] = 1  # 堤坝
+    label_map[facies_map == 200] = 2  # 河道
 
     onehot = np.eye(NUM_CLASSES)[label_map]  # -> (H, W, D, 3)
     onehot = np.transpose(onehot, (3, 0, 1, 2))  # -> (3, H, W, D)

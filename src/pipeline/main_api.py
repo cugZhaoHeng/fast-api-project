@@ -33,7 +33,7 @@ from utils.logger import create_logger
 
 
 logger = create_logger(__name__)
-router = APIRouter(prefix="/predict", tags=["pipeline"])
+router = APIRouter(prefix="/baidu/pipeline/api", tags=["pipeline"])
 xiaosong_data = []
 def parse_json_url(url):
     """
@@ -94,7 +94,7 @@ def parse_json_url(url):
         logger.info(f"从URL获取数据失败: {e}")
         return []
 
-@router.get("/get_flow_hour", summary="获取当前 Flow 数据")
+@router.get("/capacity/get_daily_data", summary="获取当前 Flow 数据")
 async def get_current_flow_data():
     logger.info(f"有人访问了 get_flow_hour 接口")
     try:
@@ -104,7 +104,7 @@ async def get_current_flow_data():
     except Exception as e:
         logger.error(e)
 
-@router.get("/get_sensor", summary="获取当前 Sensor 数据")
+@router.get("/sensor/get_full_sensor_data", summary="获取当前 Sensor 数据")
 async def get_current_flow_data():
     logger.info(f"有人访问了 get_sensor 接口")
     try:
