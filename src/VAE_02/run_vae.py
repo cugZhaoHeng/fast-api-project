@@ -242,7 +242,7 @@ def test_model():
                 DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform, download=False),
                            batch_size=64)))
             test_data = test_data.to(device)
-            recon_test_images, _, _ = model(test_data)
+            recon_test_images, _, _ = model.forward(test_data)
             recon_test_images = recon_test_images.cpu().view(64, 1, 28, 28)  # 调整形状为 (batch, channel, H, W)
 
             fig, axes = plt.subplots(8, 8, figsize=(8, 8))
