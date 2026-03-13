@@ -2,14 +2,12 @@ import os
 from datetime import datetime
 from pathlib import Path
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from generative.networks.nets import AutoencoderKL
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, RandomSampler
 import matplotlib.pyplot as plt
-import numpy as np
 
 # 假设你的 logger 已经配置好，如果没有请注释掉相关行
 from utils.logger import create_logger
@@ -17,10 +15,11 @@ logger = create_logger(__name__)
 
 # --- 1. 参数设置 ---
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+logger.info(f"device: {device}")
 batch_size = 128
-latent_channels = 1  # 按你之前的设定改为 1
-latent_spatial_size = 4  # 32 / 8 = 4
-NUM_EPOCHS = 10  # 建议训练多几轮，MONAI 模型较深
+latent_channels = 4
+latent_spatial_size = 8
+NUM_EPOCHS = 500  # 建议训练多几轮，MONAI 模型较深
 lr = 1e-4  # 学习率建议稍微调小一点，利于收敛
 kl_weight = 1e-6  # 论文中推荐的 KL 权重，防止 KLD 占用过高导致图片模糊
 
@@ -44,6 +43,7 @@ train_dataset = datasets.MNIST(root=DATA_DIR, train=True, download=True, transfo
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
 # --- 3. 定义模型 ---
+# 按照参数设计，VAE的潜在空间的通道数是
 model = AutoencoderKL(
     spatial_dims=2,
     in_channels=1,
@@ -72,41 +72,60 @@ def loss_function(recon_x, x, mu, sigma):
 
 # --- 5. 训练逻辑 ---
 def train_model():
+    loss_list = []
     start_epoch = 0
+    train_times = 0
+    # 这里需要做一个判断，判断是否有加载的模型
     if os.path.exists(LATEST_MODEL_PATH):
-        checkpoint = torch.load(LATEST_MODEL_PATH, map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-        start_epoch = checkpoint['epoch']
-        print(f"已加载模型，继续从 Epoch {start_epoch} 开始训练")
+        # 获取上一次训练的检查点
+        check_point = torch.load(LATEST_MODEL_PATH, map_location=device)
+        logger.info(f"已存在训练的模型, epoch={check_point['epoch']}")
+        # 加载上一次训练的模型的权重
+        model.load_state_dict(check_point["model_state_dict"])
+        # 加载上一次训练模型的优化器
+        optimizer.load_state_dict(check_point["optimizer_state_dict"])
+        loss_list = check_point["train_losses"]
+        start_epoch = check_point["epoch"]
+        train_times = check_point["train_times"]
+    else:
+        logger.info("第一次训练模型")
 
     for epoch in range(start_epoch, start_epoch + NUM_EPOCHS):
         model.train()
-        total_loss = 0
+        avg_loss = 0
         for batch_idx, (data, _) in enumerate(train_loader):
             data = data.to(device)
             optimizer.zero_grad()
 
             # MONAI VAE 返回的是: reconstruction, mu, sigma
-            recon_batch, mu, sigma = model(data)
+            recon_batch, mu, sigma = model.forward(data)
 
             recons_l, kl_l = loss_function(recon_batch, data, mu, sigma)
             loss = recons_l + kl_weight * kl_l
 
             loss.backward()
             optimizer.step()
-            total_loss += loss.item()
 
+            avg_loss = (avg_loss * batch_idx + loss.item()) / (batch_idx + 1)
+            loss_list.append(avg_loss)
             if batch_idx % 100 == 0:
                 print(f"Epoch {epoch + 1} [{batch_idx * len(data)}/{len(train_loader.dataset)}] "
                       f"Loss: {loss.item() / len(data):.4f} (Recon: {recons_l.item() / len(data):.4f}, KL: {kl_l.item() / len(data):.4f})")
 
-        # 保存模型
+        # torch 在保存模型的时候，应当将模型的参数，运行的次数，以及损失函数都保存进去，而不是仅仅保存参数
+        torch.save(model.state_dict(), f=LATEST_MODEL_PATH)
         torch.save({
-            'epoch': epoch + 1,
+            'epoch': start_epoch + NUM_EPOCHS,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
-        }, LATEST_MODEL_PATH)
+            'train_losses': loss_list,
+            'train_times': train_times + 1
+        }, f=LATEST_MODEL_PATH)
+        logger.info(f"模型保存成功，位置：{LATEST_MODEL_PATH}")
+        # 绘制损失函数的图片
+        plt.title("VAE_01-monai-loss")
+        plt.plot(loss_list)
+        plt.savefig(MODEL_DIR / "VAE_01-monai-loss.png")
 
 
 # --- 6. 测试与可视化 ---
@@ -160,3 +179,27 @@ if __name__ == '__main__':
         train_model()
     elif action == 'test':
         test_model()
+
+    # checkpoint = torch.load(f=LATEST_MODEL_PATH, map_location=device)
+    # logger.info(f"checkpoint: {type(checkpoint)}")
+    # model.load_state_dict(checkpoint['model_state_dict'])
+    # dataset1 = datasets.MNIST(root=DATA_DIR, train=False, transform=transform)
+    # dataloader1 = DataLoader(dataset1, batch_size=8, shuffle=True)
+    # images, labels = next(iter(dataloader1))
+    # images = images.to(device)
+    # output, mu, sigma = model.forward(x=images)
+    # logger.info(f"output:{output.shape}, mu:{mu.shape}, sigma:{sigma.shape}")
+    #
+    # latent_space = model.encode(x=images)
+    # logger.info(f"latent_space:{type(latent_space)}")
+    #
+    # random_data = torch.randn(8,1,8,8)
+    # random_data = random_data.to(device)
+    # output = model.decode(random_data)
+    # logger.info(f"output:{output.shape}")
+    # output = output.detach().cpu()
+    # image = output[0].view(32,32)
+    # plt.imshow(image, cmap='gray')
+    # plt.show()
+
+

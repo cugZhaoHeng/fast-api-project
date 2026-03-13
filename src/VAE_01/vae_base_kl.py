@@ -30,7 +30,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 batch_size = 128
 latent_channels = 4
 latent_spatial_size = 4
-NUM_EPOCHS = 1
+NUM_EPOCHS = 500
 lr = 1e-3
 
 # --- 2. 加载 MNIST 数据集 ---
@@ -92,10 +92,10 @@ class ConvVAE(nn.Module):
 
 # --- 4. 损失函数 ---
 def loss_function(recon_x, x, mu, logvar):
-    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    logger.info(f"损失记录：BCE={BCE.item()}, KLD={KLD.item()}")
-    return BCE + KLD
+    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum') / batch_size
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp()) / batch_size
+    logger.info(f"损失记录：BCE={BCE.item()}, KLD={KLD.item()}, 合计损失：{BCE.item() + KLD.item()}")
+    return BCE + 2 * KLD
 
 
 # --- 5. 训练模型 ---
@@ -136,7 +136,7 @@ def train_model():
             loss.backward()
             optimizer.step()
             avg_loss = (avg_loss * batch_idx + loss.item()) / (batch_idx + 1)
-        logger.info(f"Epoch [{epoch + 1}/{start_epoch + NUM_EPOCHS}], Loss: {avg_loss:.2f}")
+        logger.info(f"Epoch [{epoch + 1}/{start_epoch + NUM_EPOCHS}], avg loss: {avg_loss:.2f}")
         loss_list.append(avg_loss)
 
     # torch 在保存模型的时候，应当将模型的参数，运行的次数，以及损失函数都保存进去，而不是仅仅保存参数
@@ -150,64 +150,13 @@ def train_model():
     }, f=LATEST_MODEL_PATH)
     logger.info(f"模型保存成功，位置：{LATEST_MODEL_PATH}")
     # 绘制损失函数的图片
-    plt.plot(loss_list)
-    plt.savefig(MODEL_DIR / "loss.png")
-
-
-# --- 6. 观察与可视化 ---
-
-def visualize_latent_space(model, dataloader):
-    """显示原图及其对应的 4 个潜空间特征通道"""
-    model.eval()
-    with torch.no_grad():
-        data, _ = next(iter(dataloader))
-        data = data.to(device)
-        mu, _ = model.encode(data)  # 提取潜空间特征 [Batch, 4, 4, 4]
-
-        n = 5  # 显示5组对比
-        plt.figure(figsize=(15, 6))
-        for i in range(n):
-            # 1. 原始图片
-            ax = plt.subplot(latent_channels + 1, n, i + 1)
-            plt.imshow(data[i].cpu().numpy().squeeze(), cmap='gray')
-            plt.title("Original")
-            plt.axis('off')
-
-            # 2. 潜空间的 4 个通道 (4x4 的图)
-            for c in range(latent_channels):
-                ax = plt.subplot(latent_channels + 1, n, (c + 1) * n + i + 1)
-                # 提取第 c 个通道，形状为 4x4
-                latent_map = mu[i, c].cpu().numpy()
-                plt.imshow(latent_map, cmap='magma')  # 使用彩色映射更清晰
-                plt.title(f"Latent C{c}")
-                plt.axis('off')
-        plt.tight_layout()
-        plt.show()
-
-
-def plot_reconstructed(model, dataloader):
-    """对比原始图片和生成的图片"""
-    model.eval()
-    with torch.no_grad():
-        data, _ = next(iter(dataloader))
-        data = data.to(device)
-        recon, _, _ = model(data)
-
-        n = 8
-        plt.figure(figsize=(12, 4))
-        for i in range(n):
-            # 原图
-            ax = plt.subplot(2, n, i + 1)
-            plt.imshow(data[i].cpu().numpy().reshape(28, 28), cmap='gray')
-            ax.get_xaxis().set_visible(False)
-            ax.get_yaxis().set_visible(False)
-
-            # 重构图
-            ax = plt.subplot(2, n, i + 1 + n)
-            plt.imshow(recon[i].cpu().numpy().reshape(28, 28), cmap='gray')
-            ax.get_xaxis().set_visible(False)
-            ax.get_yaxis().set_visible(False)
-        plt.show()
+    fig = plt.figure()
+    axes1 = fig.add_subplot(1, 1, 1)
+    axes1.set_title("avg loss curve")
+    axes1.plot(loss_list)
+    print(f"loss_list: {len(loss_list)}")
+    # plt.show()
+    plt.savefig(MODEL_DIR / "avg_loss.png")
 
 
 def test_model():
@@ -218,83 +167,62 @@ def test_model():
     # 加载上一次训练的模型的权重
     model.load_state_dict(check_point["model_state_dict"])
     model.eval()
+
     with torch.no_grad():
-        test_mode = input("请选择要测试的模式 (1) generate (2) compare：")
-        if test_mode == "generate":
-            # 从标准正态分布中采样 Z_DIM 个随机向量
-            sample = torch.randn(8, latent_channels, latent_spatial_size, latent_spatial_size).to(device)
-            generated_images = model.decode(sample).cpu()
+        while True:
+            user_input = input("请选择要测试的模式 (1) generate (2) compare (输入 exit 或 0 退出)：").strip().lower()
+            if user_input in ["exit", "0"]:
+                logger.info("退出测试模式")
+                break
+            elif user_input in ["1", "generate"]:
+                logger.info("执行 generate 模式")
+                # 从标准正态分布中采样
+                sample = torch.randn(8, latent_channels, latent_spatial_size, latent_spatial_size).to(device)
+                generated_images = model.decode(sample).cpu()
 
-            # 可视化生成的图像
-            fig, axes = plt.subplots(2, 4, figsize=(8, 8))
-            for i, ax in enumerate(axes.flat):
-                if i < generated_images.size(0):
-                    ax.imshow(generated_images[i].view(28, 28), cmap='gray')
-                    ax.axis('off')
-            plt.suptitle(f"Generated Images epoch: {current_epoch}")
-            plt.savefig(IMAGE_DIR / f"generated_image_{current_epoch}.png")
-            logger.info(f"图片生成完毕")
-        elif test_mode == "compare":
-            # 可视化重构图像
-            logger.info("\nReconstructing images from test set...")
-            # 随机取一些测试集图片进行重构
-            test_data, _ = next(iter(
-                DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform, download=False),
-                           batch_size=64)))
-            test_data = test_data.to(device)
-            recon_test_images, _, _ = model.forward(test_data)
-            recon_test_images = recon_test_images.cpu().view(64, 1, 28, 28)  # 调整形状为 (batch, channel, H, W)
+                # 可视化生成的图像
+                fig, axes = plt.subplots(2, 4, figsize=(8, 8))
+                for i, ax in enumerate(axes.flat):
+                    if i < generated_images.size(0):
+                        ax.imshow(generated_images[i].view(28, 28), cmap='gray')
+                        ax.axis('off')
+                plt.suptitle(f"Generated Images epoch: {current_epoch}")
+                save_path = IMAGE_DIR / f"generated_image_{current_epoch}.png"
+                plt.savefig(save_path)
+                logger.info(f"图片生成完毕，已保存至 {save_path}")
+            elif user_input in ["2", "compare"]:
+                logger.info("执行 compare 模式")
+                logger.info("\nReconstructing images from test set...")
+                # 随机取一个测试 batch
+                test_data, _ = next(iter(
+                    DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform, download=False),
+                               batch_size=64)))
+                test_data = test_data.to(device)
+                recon_test_images, _, _ = model.forward(test_data)
+                recon_test_images = recon_test_images.cpu().view(64, 1, 28, 28)
 
-            fig, axes = plt.subplots(8, 8, figsize=(8, 8))
-            for i, ax in enumerate(axes.flat):
-                if i < test_data.size(0) // 2:
-                    ax.imshow(test_data[i].view(28, 28).cpu(), cmap='gray')
-                    ax.axis('off')
-                else:
-                    ax.imshow(recon_test_images[i - test_data.size(0) // 2].view(28, 28), cmap='gray')
-                    ax.axis('off')
-            plt.suptitle(f"Compare Image epoch: {current_epoch}")
-            plt.savefig(IMAGE_DIR / f"compare_image_{current_epoch}.png")
-        else:
-            logger.error(f"输入错误")
-
+                # 绘制对比图（前32张为原图，后32张为重构）
+                fig, axes = plt.subplots(8, 8, figsize=(8, 8))
+                for i, ax in enumerate(axes.flat):
+                    if i < test_data.size(0) // 2:
+                        ax.imshow(test_data[i].view(28, 28).cpu(), cmap='gray')
+                        ax.axis('off')
+                    else:
+                        ax.imshow(recon_test_images[i - test_data.size(0) // 2].view(28, 28), cmap='gray')
+                        ax.axis('off')
+                plt.suptitle(f"Compare Image epoch: {current_epoch}")
+                save_path = IMAGE_DIR / f"compare_image_{current_epoch}.png"
+                plt.savefig(save_path)
+                logger.info(f"图像对比完成，已保存至 {save_path}")
+            else:
+                logger.error("输入错误，请重新输入")
+                continue
 
 if __name__ == '__main__':
-    # mode = input("Enter mode ('train' or 'test'): ").strip().lower()
-    # if mode == "train":
-    #     train_model()
-    # elif mode == "test":
-    #     test_model()
-    # else:
-    #     logger.error("Please enter mode ('train' or 'test')")
-
-    # visualize_latent_space(model, train_loader)
-    # plot_reconstructed(model, train_loader)
-    checkpoint1 = torch.load(f=LATEST_MODEL_PATH, map_location=device)
-    model.load_state_dict(checkpoint1["model_state_dict"])
-    dataset1 = datasets.MNIST(root=DATA_DIR, train=False, transform=transform, download=False)
-    dataloader1 = DataLoader(dataset=dataset1, batch_size=1, shuffle=True)
-    image1, value = next(iter(dataloader1))
-    print(type(image1))
-
-    image1 = image1.to(device)
-    image2, mu, sigma = model.forward(image1)
-    image2 = image2.detach().cpu().view(28, 28)
-    plt.imshow(image2, cmap='gray')
-    plt.show()
-    #
-    # image1 = image1.cpu().view(28, 28)
-    # plt.imshow(image1, cmap='gray')
-    # plt.show()
-
-    # random_data = torch.randn(1, 4, 4,4)
-    # random_data = random_data.to(device)
-    # output = model.decode(random_data).detach().cpu()
-    # print(output)
-    # output = output.view(28, 28)
-    # plt.imshow(output, cmap='gray')
-    # plt.show()
-
-
-
-
+    mode = input("Enter mode ('train' or 'test'): ").strip().lower()
+    if mode == "train":
+        train_model()
+    elif mode == "test":
+        test_model()
+    else:
+        logger.error("Please enter mode ('train' or 'test')")
