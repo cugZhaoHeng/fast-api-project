@@ -1,0 +1,31 @@
+{
+  "data_dim": 784,
+  "latent_dim": 20,
+  "hidden_dim": 1024,
+  "encoder_layers": 2,
+  "data_type": "binary",
+  "model_type": "vae",
+  "architectures": [
+    "VAEModel"
+  ],
+  "_name_or_path": "uday9k/Binarized_MNIST_VAE",
+  "auto_map": {
+    "AutoConfig": "configuration_vae.VAEConfig",
+    "AutoModel": "modeling_vae.VAEModel"
+  },
+  "dataset": "mnist",
+  "image_size": 28,
+  "channels": 1,
+  "flattened": true,
+  "training": {
+    "epochs": 44,
+    "batch_size": 128,
+    "learning_rate": 0.001,
+    "optimizer": "adam"
+  },
+  "torch_dtype": "float32",
+  "framework": "pytorch",
+  "transformers_version": "4.36.0",
+  "license": "mit",
+  "description": "Variational Autoencoder for MNIST digit generation"
+}
