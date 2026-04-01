@@ -65,3 +65,7 @@ def parse_date(text: str) -> date:
     # 未匹配到任何格式
     print(f"⚠️ 无法解析日期字符串: {repr(text)}")
     return None
+
+def get_current_time(format : str='%Y%m%d_%H%M%S') -> str:
+    timestamp = datetime.now().strftime(format)
+    return timestamp
