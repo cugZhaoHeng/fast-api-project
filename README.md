@@ -32,4 +32,4 @@ LATEST_MODEL_PATH = MODEL_DIR / "latest_model.pth"
 7. 模型的保存使用统一的规则，即模型有哪些键，读取的规则也设定成一样的
 8. 在出图的时候，不要出现中文，统一使用英文，以免出现乱码
 9. 要区分维度和形状的概念
-10. todo
+10. todo ok

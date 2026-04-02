@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from nbclient.client import timestamp
-from torch import Tensor
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
 from torchvision.models import resnet18, ResNet18_Weights
@@ -51,7 +49,6 @@ NUM_EPOCHS = 3
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 LATENT_DIM = 24
-
 
 N_GEN_EVAL = 10000
 GEN_BATCH = 256
@@ -167,9 +164,10 @@ def train_model():
     model.train()
 
     loss_list, bce_list, kld_list = [], [], []  # 损失函数记录
+    mu_mean, mu_std, logvar_mean = 0, 0, 0
     start_epoch = 0
-    end_epoch = start_epoch + NUM_EPOCHS
-    train_times = 0 # 训练次数，也就是执行了多少次 train_model 函数
+    
+    train_times = 0  # 训练次数，也就是执行了多少次 train_model 函数
     total_training_time = 0.0  # 累计训练总时长（秒）
 
     # 记录本次运行开始时间
@@ -187,9 +185,10 @@ def train_model():
         train_times = checkpoint.get("train_times", 0)
         total_training_time = checkpoint.get("total_training_time", 0.0)
         logger.info(
-            f"已加载模型, 起始 epoch={start_epoch}， 终止 epoch={end_epoch}, 累计训练时长={total_training_time:.2f}s")
+            f"已加载模型, 起始 epoch={start_epoch}， 终止 epoch={start_epoch + NUM_EPOCHS}, 累计训练时长={total_training_time:.2f}s")
     else:
         logger.info("第一次训练模型")
+    end_epoch = start_epoch + NUM_EPOCHS
 
     for epoch in range(start_epoch, end_epoch):
         avg_loss, avg_bce, avg_kld = 0, 0, 0
@@ -227,6 +226,10 @@ def train_model():
         loss_list.append(avg_loss)
         bce_list.append(avg_bce)
         kld_list.append(avg_kld)
+        
+        mu_mean = float(np.mean(temp_mu))
+        mu_std = float(np.mean(temp_std))
+        logvar_mean = float(np.mean(temp_logvar))
 
         logger.info(
             f"Epoch [{epoch + 1}/{end_epoch}] Loss: {avg_loss:.2f} (BCE: {avg_bce:.2f}, KLD: {avg_kld:.2f}), beta: {beta}")
@@ -244,10 +247,10 @@ def train_model():
         'bce_losses': bce_list,
         'kld_losses': kld_list,
         'train_times': train_times + 1,
-        'total_training_time': total_training_time,  # 添加累计训练总时长
-        'mu_mean': float(np.mean(temp_mu)),
-        'mu_std': float(np.mean(temp_std)),
-        'logvar_mean': float(np.mean(temp_logvar))
+        'total_training_time': total_training_time,
+        'mu_mean': mu_mean,
+        'mu_std': mu_std,
+        'logvar_mean': logvar_mean
     }, f=LATEST_MODEL_PATH)
 
     logger.info(f"模型已保存，本次训练耗时 {elapsed:.2f}s，累计总时长 {total_training_time:.2f}s")
@@ -373,7 +376,8 @@ def generate_mode():
     current_model = load_model()
     current_timestamp: str = get_current_time()
     z = torch.randn(COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL, LATENT_DIM, device=DEVICE)
-    gen_imgs: Tensor = torch.sigmoid(current_model.decode_logits(z)).cpu()
+    # 保存前，将 pytorch的张量转化为 numpy 的数组形式
+    gen_imgs = torch.sigmoid(current_model.decode_logits(z)).detach().cpu().numpy()
 
     # 1. 保存 9 张独立大图
     for i in range(COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL):
@@ -393,6 +397,7 @@ def generate_mode():
     plt.close()
     logger.info("Generate 模式运行完毕，图片已保存。")
 
+
 @torch.no_grad()
 def compare_mode():
     """模式 2-2: 重构 9 张对比大图和宫格图"""
@@ -401,7 +406,8 @@ def compare_mode():
         return
 
     current_model = load_model()
-    loader = DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform), batch_size=9, shuffle=True)
+    loader = DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform),
+                        batch_size=COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL, shuffle=True)
 
     # 收集原始图像和对应的生成图像
     orig_list = []  # 存放原始图像张量
@@ -436,11 +442,11 @@ def compare_mode():
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
     # 转为 numpy 并去除通道维度
-    orig_np = orig.squeeze().numpy()  # [9,28,28]
-    recon_np = gen.squeeze().numpy()  # [9,28,28]
+    orig_np = orig.squeeze().numpy()
+    recon_np = gen.squeeze().numpy()
 
     # 1. 保存 9 张独立对比大图
-    for i in range(9):
+    for i in range(COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL):
         # 左右拼接
         combined = np.hstack((orig_np[i], recon_np[i]))
         filename = IMAGE_DIR / f"vae_image_compare_{timestamp}_{i + 1:02d}.png"
@@ -458,55 +464,6 @@ def compare_mode():
     plt.savefig(grid_fn, bbox_inches='tight')
     plt.close()
     logger.info("Compare 模式运行完毕，图片已保存。")
-
-
-def generate_from_posterior_mode():
-    """从后验聚合分布采样生成图像"""
-    if not LATEST_MODEL_PATH.exists():
-        logger.error("未找到模型。")
-        return
-
-    current_model = load_model()
-
-    # 收集所有训练样本的 mu（或 z）
-    all_mu = []
-    with torch.no_grad():
-        for x, _ in train_loader:  # 使用训练集 DataLoader
-            x = x.to(DEVICE, non_blocking=True)
-            mu, _ = current_model.encode(x)  # 只取 mu
-            all_mu.append(mu.cpu())
-
-    all_mu = torch.cat(all_mu, dim=0)  # [N, LATENT_DIM]
-    logger.info(f"已收集 {all_mu.shape[0]} 个样本的 mu")
-
-    # 方法1：直接使用经验分布（从这些 mu 中随机选择一个）
-    # 方法2：拟合高斯分布，计算均值向量和协方差矩阵（这里使用对角协方差简化）
-    mu_mean = all_mu.mean(dim=0)  # 均值
-    mu_cov = all_mu.var(dim=0)  # 对角方差
-    # 注意：若需要全协方差，可用 np.cov(all_mu.T)，但计算量大
-
-    # 从拟合的高斯分布中采样
-    with torch.no_grad():
-        # 生成9个样本
-        z = torch.randn(9, LATENT_DIM, device=DEVICE) * torch.sqrt(mu_cov).to(DEVICE) + mu_mean.to(DEVICE)
-        gen_imgs = torch.sigmoid(current_model.decode_logits(z)).cpu()
-
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-    # 保存 9 张大图和宫格图（沿用原有保存逻辑）
-    for i in range(9):
-        filename = IMAGE_DIR / f"vae_image_posterior_{timestamp}_{i + 1:02d}.png"
-        save_large_image(gen_imgs[i].reshape(28, 28), filename)
-
-    fig, axes = plt.subplots(3, 3, figsize=(10, 10))
-    plt.subplots_adjust(wspace=0.3, hspace=0.3)
-    for i, ax in enumerate(axes.flat):
-        ax.imshow(gen_imgs[i].reshape(28, 28), cmap='gray')
-        ax.axis('off')
-    grid_fn = IMAGE_DIR / f"vae_image_posterior_{timestamp}.png"
-    plt.savefig(grid_fn, bbox_inches='tight')
-    plt.close()
-    logger.info("从后验聚合分布生成完成。")
 
 
 def main():
@@ -537,13 +494,11 @@ def main():
                     generate_mode()
                 elif sub_choice == '2':
                     compare_mode()
-                elif sub_choice == '3':
-                    generate_from_posterior_mode()
                 elif sub_choice in ['0', 'exit']:
                     logger.info("退出程序...")
                     sys.exit(0)
                 else:
-                    logger.info("  无效输入，请输入 1, 2, 3 或 0")
+                    logger.info("  无效输入，请输入 1, 2 或 0")
         elif choice == '3':
             show_model_status()
         elif choice in ['0', 'exit']:
