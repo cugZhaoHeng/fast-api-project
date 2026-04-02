@@ -28,6 +28,10 @@ MODEL_DIR = CURRENT_DIR / 'models'
 os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
 LATEST_MODEL_PATH = MODEL_DIR / "latest_model.pth"
+COMBINE_IMAGES_ROW: int = 3  # 合并后的图像的行数，用来形成一副多个子图的整体图片
+COMBINE_IMAGES_COL: int = 3  # 合并后的图像的列数，用来形成一副多个子图的整体图片
+IMAGE_WIDTH: int = 28  # 图片的宽度像素
+IMAGE_HEIGHT: int = 28  # 图片的高度像素
 
 project_root_str = str(PROJECT_ROOT_DIR)
 if project_root_str not in sys.path:
@@ -48,16 +52,9 @@ LR = 1e-3
 WEIGHT_DECAY = 1e-5
 LATENT_DIM = 24
 
-BETA_MAX = 0.15  # 降低KL压力，避免过分“平均化”
-WARMUP_EPOCHS = 40  # 更长warmup
-FREE_BITS_PER_DIM = 0.02  # KL free bits
-L1_WEIGHT = 0.15  # 辅助边缘清晰（不要太大，防止失真）
 
 N_GEN_EVAL = 10000
 GEN_BATCH = 256
-
-IMAGE_WIDTH: int = 28    # 图片的宽度像素
-IMAGE_HEIGHT: int = 28   # 图片的高度像素
 
 # --- 2. 加载 MNIST 数据集 ---
 transform = transforms.Compose([transforms.ToTensor()])
@@ -138,9 +135,9 @@ class ConvVAE(nn.Module):
 
 
 def beta_schedule(epoch):
-    if epoch >= WARMUP_EPOCHS:
-        return BETA_MAX
-    return BETA_MAX * (epoch / max(1, WARMUP_EPOCHS))
+    if epoch >= 40:
+        return 0.15
+    return 0.15 * (epoch / max(1, 40))
 
 
 def loss_fn(logits, x, mu, logvar, beta=1.0, free_bits_per_dim=0.0, l1_weight=0.0):
@@ -164,20 +161,21 @@ def loss_fn(logits, x, mu, logvar, beta=1.0, free_bits_per_dim=0.0, l1_weight=0.
 
 
 # --- 5. 训练模型 ---
-model = ConvVAE(z_dim=LATENT_DIM).to(DEVICE)
-optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-
-model.train()
-
-
 def train_model():
-    loss_list, bce_list, kld_list = [], [], []
-    start_epoch, train_times = 0, 0
+    model = ConvVAE(z_dim=LATENT_DIM).to(DEVICE)
+    optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
+    model.train()
+
+    loss_list, bce_list, kld_list = [], [], []  # 损失函数记录
+    start_epoch = 0
+    end_epoch = start_epoch + NUM_EPOCHS
+    train_times = 0 # 训练次数，也就是执行了多少次 train_model 函数
     total_training_time = 0.0  # 累计训练总时长（秒）
 
     # 记录本次运行开始时间
     start_time = time.time()
 
+    # 如果本地存在预训练的模型，则直接加载
     if LATEST_MODEL_PATH.exists():
         checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE, weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -188,12 +186,10 @@ def train_model():
         start_epoch = checkpoint["epoch"]
         train_times = checkpoint.get("train_times", 0)
         total_training_time = checkpoint.get("total_training_time", 0.0)
-        logger.info(f"已加载模型, 起始 epoch={start_epoch}, 累计训练时长={total_training_time:.2f}s")
+        logger.info(
+            f"已加载模型, 起始 epoch={start_epoch}， 终止 epoch={end_epoch}, 累计训练时长={total_training_time:.2f}s")
     else:
         logger.info("第一次训练模型")
-
-    model.train()
-    end_epoch = start_epoch + NUM_EPOCHS
 
     for epoch in range(start_epoch, end_epoch):
         avg_loss, avg_bce, avg_kld = 0, 0, 0
@@ -203,15 +199,15 @@ def train_model():
         total_loss, total_n = 0.0, 0
         for batch_idx, (x, _) in enumerate(train_loader):
             x = x.to(DEVICE, non_blocking=True)
-            bs = x.size(0)
+            bs = x.size(0)  # 注意，bs不一定就是代码首部定义的 BATCH_SIZE，因为最后一次遍历的数量会小于 BATCH_SIZE
 
             optimizer.zero_grad(set_to_none=True)
-            logits, mu, logvar = model(x)
+            logits, mu, logvar = model.forward(x)
             loss, bce, kld = loss_fn(
                 logits, x, mu, logvar,
                 beta=beta,
-                free_bits_per_dim=FREE_BITS_PER_DIM,
-                l1_weight=L1_WEIGHT
+                free_bits_per_dim=0.02,
+                l1_weight=0.15
             )
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
@@ -340,14 +336,13 @@ def show_model_status():
         logger.error(f"读取模型状态失败: {e}")
 
 
-def save_large_image(img_data: Tensor, path: Path, title: str=None, is_compare: bool=False):
+def save_large_image(img_data, path: Path, title: str = None, is_compare: bool = False):
     """保存大尺寸图片的辅助函数"""
     # 如果是对比图，宽度加倍
     figsize = (8, 4) if is_compare else (4, 4)
     plt.figure(figsize=figsize, dpi=100)  # 100 DPI 下 4英寸=400像素
 
     if is_compare:
-        # img_data 预期为 (28, 56) 的拼接图
         plt.imshow(img_data, cmap='gray')
     else:
         plt.imshow(img_data, cmap='gray')
@@ -358,6 +353,7 @@ def save_large_image(img_data: Tensor, path: Path, title: str=None, is_compare: 
     plt.savefig(path, bbox_inches='tight')
     plt.close()
 
+
 # 从本地加载 pth 格式的模型文件，并使用 evaluate 模式
 def load_model() -> ConvVAE:
     checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
@@ -365,6 +361,7 @@ def load_model() -> ConvVAE:
     current_model.load_state_dict(checkpoint['model_state_dict'])
     current_model.eval()
     return current_model
+
 
 @torch.no_grad()
 def generate_mode():
@@ -375,18 +372,18 @@ def generate_mode():
 
     current_model = load_model()
     current_timestamp: str = get_current_time()
-    z = torch.randn(9, LATENT_DIM, device=DEVICE)
+    z = torch.randn(COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL, LATENT_DIM, device=DEVICE)
     gen_imgs: Tensor = torch.sigmoid(current_model.decode_logits(z)).cpu()
 
     # 1. 保存 9 张独立大图
-    for i in range(9):
+    for i in range(COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL):
         # 命名: vae_image_generate_时间戳_编号.png
         filename = IMAGE_DIR / f"vae_image_generate_{current_timestamp}_{i + 1:02d}.png"
         # 将图片写入到本地 images 文件夹
         save_large_image(gen_imgs[i].reshape(IMAGE_HEIGHT, IMAGE_WIDTH), filename)
 
     # 2. 保存 3*3 宫格图
-    fig, axes = plt.subplots(3, 3, figsize=(10, 10))
+    fig, axes = plt.subplots(COMBINE_IMAGES_ROW, COMBINE_IMAGES_COL, figsize=(10, 10))
     plt.subplots_adjust(wspace=0.3, hspace=0.3)
     for i, ax in enumerate(axes.flat):
         ax.imshow(gen_imgs[i].reshape(IMAGE_HEIGHT, IMAGE_WIDTH), cmap='gray')
@@ -396,16 +393,14 @@ def generate_mode():
     plt.close()
     logger.info("Generate 模式运行完毕，图片已保存。")
 
-
+@torch.no_grad()
 def compare_mode():
     """模式 2-2: 重构 9 张对比大图和宫格图"""
     if not LATEST_MODEL_PATH.exists():
         logger.error("未找到模型。")
         return
 
-    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.eval()
+    current_model = load_model()
     loader = DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform), batch_size=9, shuffle=True)
 
     # 收集原始图像和对应的生成图像
@@ -425,11 +420,11 @@ def compare_mode():
         orig_list.append(x[:take])
 
         # 对这批图像编码后解码（使用聚合后验采样）
-        mu, logvar = model.encode(x[:take])
+        mu, logvar = current_model.encode(x[:take])
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         z = mu + eps * std
-        gen = torch.sigmoid(model.decode_logits(z)).cpu()
+        gen = torch.sigmoid(current_model.decode_logits(z)).cpu()
         gen_list.append(gen)
 
         need -= take
@@ -440,30 +435,29 @@ def compare_mode():
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
-    with torch.no_grad():
-        # 转为 numpy 并去除通道维度
-        orig_np = orig.squeeze().numpy()  # [9,28,28]
-        recon_np = gen.squeeze().numpy()  # [9,28,28]
+    # 转为 numpy 并去除通道维度
+    orig_np = orig.squeeze().numpy()  # [9,28,28]
+    recon_np = gen.squeeze().numpy()  # [9,28,28]
 
-        # 1. 保存 9 张独立对比大图
-        for i in range(9):
-            # 左右拼接
-            combined = np.hstack((orig_np[i], recon_np[i]))
-            filename = IMAGE_DIR / f"vae_image_compare_{timestamp}_{i + 1:02d}.png"
-            save_large_image(combined, filename, title="Original | Reconstructed", is_compare=True)
+    # 1. 保存 9 张独立对比大图
+    for i in range(9):
+        # 左右拼接
+        combined = np.hstack((orig_np[i], recon_np[i]))
+        filename = IMAGE_DIR / f"vae_image_compare_{timestamp}_{i + 1:02d}.png"
+        save_large_image(combined, filename, title="Original | Reconstructed", is_compare=True)
 
-        # 2. 保存 3*3 宫格对比总图
-        fig, axes = plt.subplots(3, 3, figsize=(12, 12))
-        plt.subplots_adjust(wspace=0.4, hspace=0.4)
-        for i, ax in enumerate(axes.flat):
-            combined = np.hstack((orig_np[i], recon_np[i]))
-            ax.imshow(combined, cmap='gray')
-            ax.set_title(f"Pair {i + 1:02d}")
-            ax.axis('off')
-        grid_fn = IMAGE_DIR / f"vae_image_compare_{timestamp}.png"
-        plt.savefig(grid_fn, bbox_inches='tight')
-        plt.close()
-        logger.info("Compare 模式运行完毕，图片已保存。")
+    # 2. 保存 3*3 宫格对比总图
+    fig, axes = plt.subplots(COMBINE_IMAGES_ROW, COMBINE_IMAGES_COL, figsize=(12, 12))
+    plt.subplots_adjust(wspace=0.4, hspace=0.4)
+    for i, ax in enumerate(axes.flat):
+        combined = np.hstack((orig_np[i], recon_np[i]))
+        ax.imshow(combined, cmap='gray')
+        ax.set_title(f"Pair {i + 1:02d}")
+        ax.axis('off')
+    grid_fn = IMAGE_DIR / f"vae_image_compare_{timestamp}.png"
+    plt.savefig(grid_fn, bbox_inches='tight')
+    plt.close()
+    logger.info("Compare 模式运行完毕，图片已保存。")
 
 
 def generate_from_posterior_mode():
@@ -472,16 +466,14 @@ def generate_from_posterior_mode():
         logger.error("未找到模型。")
         return
 
-    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE, weights_only=False)
-    model.load_state_dict(checkpoint["model_state_dict"])
-    model.eval()
+    current_model = load_model()
 
     # 收集所有训练样本的 mu（或 z）
     all_mu = []
     with torch.no_grad():
         for x, _ in train_loader:  # 使用训练集 DataLoader
             x = x.to(DEVICE, non_blocking=True)
-            mu, _ = model.encode(x)  # 只取 mu
+            mu, _ = current_model.encode(x)  # 只取 mu
             all_mu.append(mu.cpu())
 
     all_mu = torch.cat(all_mu, dim=0)  # [N, LATENT_DIM]
@@ -497,7 +489,7 @@ def generate_from_posterior_mode():
     with torch.no_grad():
         # 生成9个样本
         z = torch.randn(9, LATENT_DIM, device=DEVICE) * torch.sqrt(mu_cov).to(DEVICE) + mu_mean.to(DEVICE)
-        gen_imgs = torch.sigmoid(model.decode_logits(z)).cpu()
+        gen_imgs = torch.sigmoid(current_model.decode_logits(z)).cpu()
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
 
