@@ -17,6 +17,8 @@ CURRENT_DIR = Path(__file__).resolve().parent
 SRC_DIR = CURRENT_DIR.parent
 PROJECT_ROOT_DIR = SRC_DIR.parent
 DATA_DIR = PROJECT_ROOT_DIR / 'data'
+GEO_IMAGE_DIR = DATA_DIR / 'geo_images'
+
 IMAGE_DIR = CURRENT_DIR / 'images'
 MODEL_DIR = CURRENT_DIR / 'models'
 os.makedirs(IMAGE_DIR, exist_ok=True)
@@ -24,8 +26,8 @@ os.makedirs(MODEL_DIR, exist_ok=True)
 LATEST_MODEL_PATH = MODEL_DIR / "latest_model.pth"
 COMBINE_IMAGES_ROW: int = 3  # 合并后的图像的行数，用来形成一副多个子图的整体图片
 COMBINE_IMAGES_COL: int = 3  # 合并后的图像的列数，用来形成一副多个子图的整体图片
-IMAGE_WIDTH: int = 28  # 图片的宽度像素
-IMAGE_HEIGHT: int = 28  # 图片的高度像素
+IMAGE_WIDTH: int = 64  # 图片的宽度像素
+IMAGE_HEIGHT: int = 64  # 图片的高度像素
 
 project_root_str = str(PROJECT_ROOT_DIR)
 if project_root_str not in sys.path:
@@ -34,25 +36,44 @@ if project_root_str not in sys.path:
 from utils.logger import create_logger
 from utils.gpu_info import init_gpu_environment
 from utils.date_util import get_current_time
+from utils.image_dataloader import get_vae_dataloaders
 
 logger = create_logger(__name__)
 
 # --- 1. 参数设置 ---
 DEVICE = init_gpu_environment()
 BATCH_SIZE = 128
-NUM_EPOCHS = 500
+NUM_EPOCHS = 1000
 
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 LATENT_DIM = 24
 
 # --- 2. 加载 MNIST 数据集 ---
-transform = transforms.Compose([transforms.ToTensor()])
-train_dataset = datasets.MNIST(root=DATA_DIR, train=True, download=False, transform=transform)
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
+# 设置 transform
+transform = transforms.Compose([
+    transforms.Resize((64, 64)),
+    transforms.ToTensor(),
+])
 
-test_dataset = datasets.MNIST(root=DATA_DIR, train=False, download=False, transform=transform)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True)
+train_dataset, train_loader, test_loader = get_vae_dataloaders(GEO_IMAGE_DIR, transform)
+logger.info(f"train_loader: {len(train_loader)}")
+logger.info(f"test_loader: {len(test_loader)}")
+
+class ResBlock(nn.Module):
+    def __init__(self, ch):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Conv2d(ch, ch, 3, 1, 1),
+            nn.BatchNorm2d(ch),
+            nn.SiLU(inplace=True),
+            nn.Conv2d(ch, ch, 3, 1, 1),
+            nn.BatchNorm2d(ch)
+        )
+        self.act = nn.SiLU(inplace=True)
+
+    def forward(self, x):
+        return self.act(x + self.net(x))
 
 
 class ResBlock(nn.Module):
@@ -72,34 +93,56 @@ class ResBlock(nn.Module):
 
 
 class ConvVAE(nn.Module):
-    def __init__(self, z_dim=24):
+    def __init__(self, z_dim=128):
         super().__init__()
         self.z_dim = z_dim
 
-        # Encoder
+        # Encoder: 1x64x64 -> 256x4x4
+        # 经历 4 次下采样 (Stride=2): 64->32, 32->16, 16->8, 8->4
         self.enc = nn.Sequential(
-            nn.Conv2d(1, 32, 4, 2, 1),
+            nn.Conv2d(1, 32, 4, 2, 1),      # 32x32
             nn.BatchNorm2d(32),
             nn.SiLU(inplace=True),
             ResBlock(32),
 
-            nn.Conv2d(32, 64, 4, 2, 1),
+            nn.Conv2d(32, 64, 4, 2, 1),     # 16x16
             nn.BatchNorm2d(64),
             nn.SiLU(inplace=True),
             ResBlock(64),
-        )
-        self.fc_mu = nn.Linear(64 * 7 * 7, z_dim)
-        self.fc_logvar = nn.Linear(64 * 7 * 7, z_dim)
 
-        # Decoder
-        self.fc_dec = nn.Linear(z_dim, 64 * 7 * 7)
+            nn.Conv2d(64, 128, 4, 2, 1),    # 8x8
+            nn.BatchNorm2d(128),
+            nn.SiLU(inplace=True),
+            ResBlock(128),
+
+            nn.Conv2d(128, 256, 4, 2, 1),   # 4x4
+            nn.BatchNorm2d(256),
+            nn.SiLU(inplace=True),
+        )
+        
+        # 4x4 * 256 = 4096
+        self.fc_mu = nn.Linear(256 * 4 * 4, z_dim)
+        self.fc_logvar = nn.Linear(256 * 4 * 4, z_dim)
+
+        # Decoder: z -> 1x64x64
+        self.fc_dec = nn.Linear(z_dim, 256 * 4 * 4)
         self.dec = nn.Sequential(
+            ResBlock(256),
+            nn.ConvTranspose2d(256, 128, 4, 2, 1), # 8x8
+            nn.BatchNorm2d(128),
+            nn.SiLU(inplace=True),
+            
+            ResBlock(128),
+            nn.ConvTranspose2d(128, 64, 4, 2, 1),  # 16x16
+            nn.BatchNorm2d(64),
+            nn.SiLU(inplace=True),
+            
             ResBlock(64),
-            nn.ConvTranspose2d(64, 32, 4, 2, 1),  # 7 -> 14
+            nn.ConvTranspose2d(64, 32, 4, 2, 1),   # 32x32
             nn.BatchNorm2d(32),
             nn.SiLU(inplace=True),
-            ResBlock(32),
-            nn.ConvTranspose2d(32, 1, 4, 2, 1)  # 14 -> 28 (logits)
+            
+            nn.ConvTranspose2d(32, 1, 4, 2, 1)     # 64x64 (Logits)
         )
 
     def encode(self, x):
@@ -114,7 +157,8 @@ class ConvVAE(nn.Module):
         return mu + eps * std
 
     def decode_logits(self, z):
-        h = self.fc_dec(z).view(-1, 64, 7, 7)
+        # 关键修正：从 z 还原回 4x4, 256通道 的特征图
+        h = self.fc_dec(z).view(-1, 256, 4, 4)
         return self.dec(h)
 
     def forward(self, x):
@@ -122,7 +166,6 @@ class ConvVAE(nn.Module):
         z = self.reparam(mu, logvar)
         logits = self.decode_logits(z)
         return logits, mu, logvar
-
 
 def beta_schedule(epoch):
     if epoch >= 40:
@@ -399,20 +442,19 @@ def compare_mode():
         return
 
     current_model = load_model()
-    loader = DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform),
-                        batch_size=COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL, shuffle=True)
+    train_dataset, train_loader, test_loader = get_vae_dataloaders(GEO_IMAGE_DIR, transform, batch_size=COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL, split_ratio=1.0)
 
     # 收集原始图像和对应的生成图像
     orig_list = []  # 存放原始图像张量
     gen_list = []  # 存放生成图像张量
     need = 9
-    it = iter(loader)
+    it = iter(train_loader)
 
     while need > 0:
         try:
             x, _ = next(it)
         except StopIteration:
-            it = iter(loader)
+            it = iter(train_loader)
             x, _ = next(it)
         x = x.to(DEVICE, non_blocking=True)
         take = min(need, x.size(0))
