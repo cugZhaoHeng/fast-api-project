@@ -40,6 +40,8 @@ from utils.logger import create_logger
 logger = create_logger(__name__)
 from utils.gpu_info import init_gpu_environment
 from utils.date_util import get_current_time
+from utils.image_evaluator import evaluate_images
+from utils.fid_pr_evaluator import compute_fid_and_pr 
 
 # --- 1. 参数设置 ---
 DEVICE = init_gpu_environment()
@@ -492,6 +494,89 @@ def denoise_process_mode():
     logger.info("去噪过程展示图已保存。")
 
 
+# ==========================================
+# [模式 4] 评估 DDPM 生成质量的入口函数 (完整版: IS + FID + P&R)
+# ==========================================
+@torch.no_grad()
+def evaluate_model():
+    if not LATEST_MODEL_PATH.exists():
+        logger.error("未找到 DDPM 模型，请先训练。")
+        return
+
+    logger.info("=" * 40)
+    logger.info("开始终极评估模式 (Evaluate Mode)...")
+    logger.info("将计算 置信度、熵、覆盖率、FID、Precision、Recall 6大指标")
+    
+    ddpm = load_model()
+    
+    # 样本总数 (为了 P&R 的流形估计准确，建议样本不低于 250，有条件可以调到 1000)
+    total_eval_samples = 250  
+    batch_size = 50  
+    gen_list = []
+    
+    start_time = time.time()
+    
+    # 1. 生成假图片
+    for i in range(0, total_eval_samples, batch_size):
+        curr_bs = min(batch_size, total_eval_samples - i)
+        logger.info(f" -> 正在生成批次 [{i + curr_bs}/{total_eval_samples}]...")
+        imgs = ddpm.sample(curr_bs)  
+        gen_list.append(imgs)
+    all_gen_imgs = torch.cat(gen_list, dim=0)
+
+    # 2. 抽取真图片
+    logger.info(" -> 正在从测试集抽取真实图片...")
+    real_list = []
+    collected = 0
+    for x, _ in test_loader:
+        x_norm = (x + 1) / 2
+        x_norm = torch.clamp(x_norm, 0.0, 1.0)
+        take = min(x_norm.size(0), total_eval_samples - collected)
+        real_list.append(x_norm[:take])
+        collected += take
+        if collected >= total_eval_samples: break
+    all_real_imgs = torch.cat(real_list, dim=0)
+
+    try:
+        # 3. 计算基于分类器的指标 (IS家族)
+        logger.info(" -> 计算分类器指标 (置信度/熵/覆盖率)...")
+        max_conf, entropy, coverage = evaluate_images(all_gen_imgs, device=DEVICE)
+        
+        # 4. 计算基于特征空间的指标 (FID, P&R)
+        resnet_path = MODEL_DIR / 'resnet18-f37072fd.pth'
+        r_path_str = str(resnet_path) if resnet_path.exists() else None
+
+        logger.info(" -> 计算特征流形指标 (FID / Precision / Recall)...")
+        fid_score, precision, recall = compute_fid_and_pr(
+            gen_images=all_gen_imgs, 
+            real_images=all_real_imgs, 
+            device=DEVICE, 
+            batch_size=128
+        )
+
+        elapsed = time.time() - start_time
+        
+        # 5. 打印六边形战士评测战报
+        logger.info("\n" + "=" * 55)
+        logger.info(f"{'DDPM 终极生成质量评估报告':^50}")
+        logger.info("-" * 55)
+        logger.info(f" 评估规模     : {total_eval_samples} 生成 vs {total_eval_samples} 真实")
+        logger.info(f" 评测耗时     : {elapsed:.2f} 秒")
+        logger.info("-" * 55)
+        logger.info(f" [分类微观指标 - 基于 MNIST 分类器]")
+        logger.info(f" 平均置信度   : {max_conf:.4f}  (越高越好，数字是否逼真可认)")
+        logger.info(f" 类别覆盖率   : {coverage:.4f}  (越高越好，0-9类别是否均匀)")
+        logger.info(f" 平均熵值     : {entropy:.4f}  (越低越好，分类器判断是否坚决)")
+        logger.info("-" * 55)
+        logger.info(f" [流形宏观指标 - 基于 ResNet18 特征空间]")
+        logger.info(f" FID 分数     : {fid_score:.4f}  (越低越好，整体风格距离)")
+        logger.info(f" Precision    : {precision:.4f}  (越高越好，保真度/画工质量)")
+        logger.info(f" Recall       : {recall:.4f}  (越高越好，多样性/是否漏图)")
+        logger.info("=" * 55 + "\n")
+        
+    except Exception as e:
+        logger.error(f"评估失败: {str(e)}")
+
 def main():
     while True:
         logger.info("\n" + "=" * 40)
@@ -499,6 +584,7 @@ def main():
         logger.info(" [1] 训练模型 (Train)")
         logger.info(" [2] 测试模式 (Test: Generate/Denoising)")
         logger.info(" [3] 查看模型状态 (Status)")
+        logger.info(" [4] 评估模型指标(Evaluate)")
         logger.info(" [0/exit] 退出程序")
         logger.info("=" * 40)
 
@@ -524,6 +610,8 @@ def main():
                     logger.info("  无效输入。")
         elif choice == '3':
             show_model_status()
+        elif choice == '4':
+            evaluate_model()
         elif choice in ['0', 'exit']:
             logger.info("退出程序...")
             break
