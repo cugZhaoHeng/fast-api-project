@@ -263,7 +263,7 @@ def train_model():
         for batch_idx, (x, _) in enumerate(train_loader):
             x = x.to(DEVICE)
             optimizer.zero_grad()
-            loss = ddpm(x)
+            loss = ddpm.forward(x)
             loss.backward()
             nn.utils.clip_grad_norm_(ddpm.parameters(), 1.0)
             optimizer.step()
@@ -388,6 +388,86 @@ def denoise_process_mode():
     logger.info(f"去噪过程展示图已保存为 {grid_fn.name}")
 
 @torch.no_grad()
+def diffusion_reconstruction_mode():
+    """
+    模式 2-3: 完整流程展示
+    第一行: 原始地质图 -> 逐步加噪 -> 纯噪声 (Forward Process)
+    第二行: 纯噪声 -> 逐步去噪 -> 新的地质图 (Reverse Process)
+    """
+    if not LATEST_MODEL_PATH.exists():
+        logger.error("未找到模型。")
+        return
+
+    logger.info("正在执行 [加噪-去噪] 全流程可视化...")
+    ddpm = load_model()
+    
+    # 1. 从测试集中取出一个原始样本 x0
+    x, _ = next(iter(test_loader))
+    x_0 = x[0:1].to(DEVICE) # 取第一张图，保持 Batch 维度为 1
+    
+    # 定义观察的时间点
+    stages = [0, 200, 400, 600, 800, 1000]
+    
+    # --- 过程一：正向加噪 (Forward) ---
+    forward_list = []
+    for t_val in stages:
+        if t_val == 0:
+            forward_list.append(x_0)
+        else:
+            t_tensor = torch.full((1,), t_val - 1, device=DEVICE, dtype=torch.long)
+            noise = torch.randn_like(x_0)
+            # 使用 DDPM 的加噪公式: x_t = sqrt_alpha_bar * x_0 + sqrt_one_minus_alpha_bar * noise
+            x_t = (
+                ddpm.extract(ddpm.sqrt_alphas_cumprod, t_tensor, x_0.shape) * x_0 +
+                ddpm.extract(ddpm.sqrt_one_minus_alphas_cumprod, t_tensor, x_0.shape) * noise
+            )
+            forward_list.append(x_t)
+
+    # --- 过程二：逆向去噪 (Backward) ---
+    # 我们从正向加噪的最后一步结果 (x_1000) 开始去噪
+    backward_stages = {s: None for s in stages}
+    curr_img = forward_list[-1] # 这是 T=1000 的噪声图
+    
+    for i in reversed(range(0, TIMESTEPS)):
+        t_tensor = torch.full((1,), i, device=DEVICE, dtype=torch.long)
+        curr_img = ddpm.p_sample(curr_img, t_tensor, i)
+        
+        # 记录关键帧
+        display_t = i + 1 if i != 0 else 0
+        if display_t in stages:
+            backward_stages[display_t] = curr_img
+
+    # --- 绘图可视化 ---
+    num_cols = len(stages)
+    fig, axes = plt.subplots(2, num_cols, figsize=(num_cols * 2.5, 6))
+    
+    for col in range(num_cols):
+        # 第一行：正向加噪
+        ax_f = axes[0, col]
+        img_f = (forward_list[col][0].cpu() + 1) / 2 # [-1,1] -> [0,1]
+        ax_f.imshow(img_f.squeeze(), cmap='gray')
+        ax_f.axis('off')
+        ax_f.set_title(f"Forward T={stages[col]}")
+
+        # 第二行：逆向去噪
+        ax_b = axes[1, col]
+        # 注意：backward_stages 是从 1000 到 0，绘图顺序要匹配 stages 列表
+        target_t = stages[col]
+        img_b = (backward_stages[target_t][0].cpu() + 1) / 2
+        ax_b.imshow(img_b.squeeze(), cmap='gray')
+        ax_b.axis('off')
+        ax_b.set_title(f"Reverse T={target_t}")
+
+    plt.suptitle("DDPM Forward Diffusion & Reverse Reconstruction", fontsize=16)
+    plt.tight_layout()
+    
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    save_fn = IMAGE_DIR / f"geo_full_process_{timestamp}.png"
+    plt.savefig(save_fn, bbox_inches='tight')
+    plt.close()
+    logger.info(f"全流程可视化已保存至: {save_fn}")
+
+@torch.no_grad()
 def evaluate_model():
     if not LATEST_MODEL_PATH.exists(): return
     logger.info("开始地质图生成质量评估 (FID + P&R)...")
@@ -408,14 +488,68 @@ def evaluate_model():
     
     logger.info(f"评估结果: FID={fid:.4f}, Precision={prec:.4f}, Recall={recall:.4f}")
 
+def generate_loss_plot():
+    """模式: 从本地加载模型，绘制并保存损失函数图表 (通用版)"""
+    if not LATEST_MODEL_PATH.exists():
+        logger.info("\n[提示] 尚未发现模型文件，请先训练模型。")
+        return
+
+    try:
+        # 加载权重字典
+        checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE, weights_only=False)
+        loss_list = checkpoint.get('train_losses', [])
+        current_epoch = checkpoint.get('epoch', len(loss_list))
+
+        if not loss_list:
+            logger.warning("模型文件中没有发现损失记录数据。")
+            return
+
+        total_epochs = len(loss_list)
+        # 核心逻辑：最多提取 20 个采样点，防止图表点位过密
+        num_points = min(total_epochs, 20)
+        indices = np.linspace(0, total_epochs - 1, num_points, dtype=int)
+        
+        sampled_epochs = indices + 1  # 坐标从 1 开始
+        sampled_losses = [loss_list[i] for i in indices]
+
+        plt.figure(figsize=(8, 5))
+        # 绘制浅色趋势线
+        plt.plot(np.arange(1, total_epochs + 1), loss_list, color='blue', alpha=0.2, label='Full History')
+        # 绘制带点的采样线
+        plt.plot(sampled_epochs, sampled_losses, color='blue', linestyle='-', linewidth=2, label='Trend')
+        plt.scatter(sampled_epochs, sampled_losses, color='red', s=40, zorder=5, label='Sampled Points')
+
+        plt.title(f"DDPM Training Loss (Total Epochs: {total_epochs})")
+        plt.xlabel("Epochs")
+        plt.ylabel("MSE Loss")
+        plt.grid(True, linestyle='--', alpha=0.6)
+        plt.legend()
+        
+        # 自动识别是 MNIST 还是 GEO，生成文件名
+        prefix = "mnist" if "mnist" in str(LATEST_MODEL_PATH).lower() else "geo"
+        save_path = MODEL_DIR / f"{prefix}_loss_epoch_{current_epoch}.png"
+        
+        plt.tight_layout()
+        plt.savefig(save_path)
+        plt.close()
+        
+        logger.info("=" * 40)
+        logger.info(f"Loss 图表已成功生成！")
+        logger.info(f"保存路径: {save_path.name}")
+        logger.info("=" * 40)
+
+    except Exception as e:
+        logger.error(f"生成 Loss 图表失败: {e}")
+
 # Main 菜单逻辑保持不变
 def main():
     while True:
-        print("\n" + "="*40)
-        print("    DDPM 2D 地质图 (64x64) 管理系统")
-        print(" [1] 训练模型")
-        print(" [2] 生成测试 (9张宫格)")
-        print(" [3] 评估模型 (FID/PR)")
+        logger.info("\n" + "="*40)
+        logger.info("    DDPM 2D 地质图 (64x64) 管理系统")
+        logger.info(" [1] 训练模型")
+        logger.info(" [2] 生成测试 (9张宫格)")
+        logger.info(" [3] 评估模型 (FID/PR)")
+        logger.info(" [4] 生成损失函数图表 (Loss Plot)")
         print(" [0] 退出")
         choice = input("请选择: ").strip()
         if choice == '1': train_model()
@@ -424,6 +558,7 @@ def main():
                 logger.info("\n  >>> 测试子菜单:")
                 logger.info("  [1] Generate (生成 9 张地质图)")
                 logger.info("  [2] Denoising Process (去噪渐变展示)")
+                logger.info("  [3] Forward & Backward (正向加噪-逆向生成全过程)")
                 logger.info("  [0/exit] 返回主菜单")
 
                 sub_choice = input("  请选择测试功能: ").strip().lower()
@@ -431,10 +566,16 @@ def main():
                     generate_mode()
                 elif sub_choice == '2':
                     denoise_process_mode()
+                elif sub_choice == '3':
+                    diffusion_reconstruction_mode()
                 elif sub_choice in ['0', 'exit']:
                     break
-        elif choice == '3': evaluate_model()
-        elif choice == '0': break
+        elif choice == '3': 
+            evaluate_model()
+        elif choice == '4':
+            generate_loss_plot()
+        elif choice == '0': 
+            break
 
 if __name__ == '__main__':
     main()
