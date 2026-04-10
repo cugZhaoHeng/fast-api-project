@@ -46,8 +46,7 @@ from utils.fid_pr_evaluator import compute_fid_and_pr
 # --- 1. 参数设置 ---
 DEVICE = init_gpu_environment()
 BATCH_SIZE = 128
-NUM_EPOCHS = 50  # 扩散模型收敛比VAE慢，建议稍微增加一点 epoch
-
+NUM_EPOCHS = 50
 LR = 2e-4
 WEIGHT_DECAY = 1e-4
 
@@ -211,7 +210,7 @@ def UNet_init(self):
 
 # --- 4. 扩散模型框架调度器 DDPM ---
 class DDPM(nn.Module):
-    def __init__(self, model, timesteps=1000):
+    def __init__(self, model: UNet, timesteps=1000):
         super().__init__()
         self.model = model
         self.timesteps = timesteps
@@ -249,7 +248,7 @@ class DDPM(nn.Module):
         )
         
         # U-Net 预测噪声
-        predicted_noise = self.model(x_t, t)
+        predicted_noise = self.model.forward(x_t, t)
         
         # 扩散模型核心就是对齐真实噪声和预测噪声的分布 (MSE Loss)
         loss = F.mse_loss(noise, predicted_noise)
@@ -331,7 +330,7 @@ def train_model():
 
             optimizer.zero_grad(set_to_none=True)
             # 前向计算 Loss
-            loss = ddpm(x)
+            loss = ddpm.forward(x)
             loss.backward()
             nn.utils.clip_grad_norm_(ddpm.parameters(), 1.0)
             optimizer.step()

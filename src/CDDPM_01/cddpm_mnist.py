@@ -164,7 +164,7 @@ class ConditionalUNet(nn.Module):
 
 # --- 4. CDDPM 框架 ---
 class CDDPM(nn.Module):
-    def __init__(self, model, timesteps=1000):
+    def __init__(self, model: ConditionalUNet, timesteps=1000):
         super().__init__()
         self.model = model
         self.timesteps = timesteps
@@ -194,7 +194,7 @@ class CDDPM(nn.Module):
         x_t = (self.extract(self.sqrt_alphas_cumprod, t, x_0.shape) * x_0 +
                self.extract(self.sqrt_one_minus_alphas_cumprod, t, x_0.shape) * noise)
         
-        return F.mse_loss(noise, self.model(x_t, t, y_train))
+        return F.mse_loss(noise, self.model.forward(x_t, t, y_train))
 
     @torch.no_grad()
     def sample(self, labels, cfg_scale=3.0):
@@ -257,7 +257,7 @@ def train_model():
         for x, y in train_loader:
             x, y = x.to(DEVICE), y.to(DEVICE)
             optimizer.zero_grad()
-            loss = cddpm(x, y)
+            loss = cddpm.forward(x, y)
             loss.backward()
             optimizer.step()
             epoch_loss += loss.item()
