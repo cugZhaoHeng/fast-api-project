@@ -1,0 +1,11 @@
+Standard Normal:
+  Confidence: 0.9077
+  Entropy: 0.2398
+  Coverage: 0.8929
+  Final Score: 90.09
+
+Aggregated Posterior:
+  Confidence: 0.9949
+  Entropy: 0.0153
+  Coverage: 0.9654
+  Final Score: 98.57
