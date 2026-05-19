@@ -3,6 +3,7 @@ import math
 from pathlib import Path
 import random
 from typing import List, Optional, Tuple
+import time
 
 import numpy as np
 import pandas as pd
@@ -29,6 +30,7 @@ IMAGE_DIR = CURRENT_DIR / 'images'
 MODEL_DIR = CURRENT_DIR / 'models'
 os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
+RUN_TS = int(time.time() * 1000)
 
 # =========================
 # 1. 配置
@@ -352,30 +354,39 @@ def inverse_transform_sample(sample: np.ndarray, scaler: StandardScaler) -> pd.D
 def plot_generated_sample(df: pd.DataFrame, save_path: Optional[str] = None) -> None:
     depth = np.arange(len(df))
 
-    fig, axes = plt.subplots(1, 4, figsize=(12, 6), sharey=True)
+    fig, axes = plt.subplots(1, 4, figsize=(14, 8), sharey=True)
 
-    axes[0].plot(df["GR"], depth)
-    axes[0].set_title("GR")
+    curve_info = [
+        ("GR", "green", "API"),
+        ("RHOB", "red", "g/cm³"),
+        ("NPHI", "blue", "fraction"),
+        ("RILD", "purple", "ohm·m")
+    ]
 
-    axes[1].plot(df["RHOB"], depth)
-    axes[1].set_title("RHOB")
+    for ax, (col, color, unit) in zip(axes, curve_info):
+        ax.plot(df[col], depth, color=color, linewidth=1.2)
 
-    axes[2].plot(df["NPHI"], depth)
-    axes[2].set_title("NPHI")
+        ax.set_title(col, fontsize=12)
+        ax.set_xlabel(unit)
 
-    axes[3].plot(df["RILD"], depth)
-    axes[3].set_title("RILD")
-
-    for ax in axes:
+        # 测井曲线标准方向：
+        # 上浅下深
         ax.invert_yaxis()
+
         ax.grid(True, alpha=0.3)
 
-    fig.suptitle("Generated well-log window")
+    fig.suptitle(
+        f"Generated Well Log Window | ts={RUN_TS}",
+        fontsize=14
+    )
+
     plt.tight_layout()
 
     if save_path:
         plt.savefig(save_path, dpi=150)
+
     plt.show()
+
 
 
 # =========================
@@ -428,7 +439,9 @@ def main() -> None:
     sample_df = inverse_transform_sample(sample_np, scaler)
     print(sample_df.head())
 
-    plot_generated_sample(sample_df, save_path=IMAGE_DIR / "generated_well_log.png")
+    img_path = IMAGE_DIR / f"generated_well_log_{RUN_TS}.png"
+
+    plot_generated_sample(sample_df, save_path=img_path)
     print("Done. Saved figure to generated_well_log.png")
 
 
