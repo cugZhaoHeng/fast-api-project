@@ -113,39 +113,47 @@ class SimpleUNet(nn.Module):
 
 # 测试代码
 if __name__ == "__main__":
-    from torchinfo import summary
-    from pathlib import Path
+    # from torchinfo import summary
+    # from pathlib import Path
     
-    # 1. 明确指定设备 (有 GPU 就用 GPU，没有就用 CPU)
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # # 1. 明确指定设备 (有 GPU 就用 GPU，没有就用 CPU)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    # 2. 实例化模型，并移动到对应设备
-    model = SimpleUNet(in_channels=1, out_channels=1).to(device)
+    # # 2. 实例化模型，并移动到对应设备
+    # model = SimpleUNet(in_channels=1, out_channels=1).to(device)
     
-    # 3. 创建假数据，也必须移动到同【同一个】设备！
-    dummy_img = torch.randn(1, 1, 64, 64).to(device)
+    # # 3. 创建假数据，也必须移动到同【同一个】设备！
+    # dummy_img = torch.randn(1, 1, 64, 64).to(device)
     
-    # 前向传播测试
-    output = model(dummy_img)
-    print(f"输入尺寸: {dummy_img.shape}")
-    print(f"输出尺寸: {output.shape}") 
+    # # 前向传播测试
+    # output = model(dummy_img)
+    # print(f"输入尺寸: {dummy_img.shape}")
+    # print(f"输出尺寸: {output.shape}") 
     
-    # 打印网络结构 (传给 summary 的 tensor 大小不需要带 batch_size，或者直接传 tuple)
-    summary(model, input_size=(1, 1, 64, 64), device=device)
+    # # 打印网络结构 (传给 summary 的 tensor 大小不需要带 batch_size，或者直接传 tuple)
+    # summary(model, input_size=(1, 1, 64, 64), device=device)
     
-    # ==========================================
-    # 导出 ONNX 的关键步骤！
-    # ==========================================
-    # 4. 【灵魂一步】：切换到评估模式，锁定 BatchNorm 等层！
-    model.eval()
+    # # ==========================================
+    # # 导出 ONNX 的关键步骤！
+    # # ==========================================
+    # # 4. 【灵魂一步】：切换到评估模式，锁定 BatchNorm 等层！
+    # model.eval()
     
-    CURRENT_DIR = Path(__file__).resolve().parent
-    onnx_path = CURRENT_DIR / "unet.onnx"
+    # CURRENT_DIR = Path(__file__).resolve().parent
+    # onnx_path = CURRENT_DIR / "unet.onnx"
     
-    # 5. 导出模型 (保持 opset_version=18，顺应新版 PyTorch 的脾气)
-    torch.onnx.export(model, dummy_img, onnx_path, 
-                    export_params=True, 
-                    opset_version=18, 
-                    do_constant_folding=True)
+    # # 5. 导出模型 (保持 opset_version=18，顺应新版 PyTorch 的脾气)
+    # torch.onnx.export(model, dummy_img, onnx_path, 
+    #                 export_params=True, 
+    #                 opset_version=18, 
+    #                 do_constant_folding=True)
                     
-    print(f"ONNX 文件导出成功！保存在: {onnx_path}")
+    # print(f"ONNX 文件导出成功！保存在: {onnx_path}")
+    
+    
+    a = nn.Embedding(10, 16)
+    print(a)
+    a1 = a(torch.tensor(11))
+    print(a1)
+    b1 = a(torch.tensor([1,2]))
+    print(b1)
