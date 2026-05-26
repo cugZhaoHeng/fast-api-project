@@ -32,7 +32,7 @@ IMAGE_DIR = CURRENT_DIR / "images"
 MODEL_DIR = CURRENT_DIR / "models"
 os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
-LATEST_MODEL_PATH = MODEL_DIR / "latest_ddpm_dfn_time_condition_model.pth"
+LATEST_MODEL_PATH = MODEL_DIR / "latest_ddpm_dfn_num_mu_condition_model.pth"
 
 project_root_str = str(PROJECT_ROOT_DIR)
 if project_root_str not in sys.path:
@@ -46,7 +46,7 @@ from utils.date_util import get_current_time
 
 IMAGE_SIZE = 128
 BATCH_SIZE = 32
-NUM_EPOCHS = 100
+NUM_EPOCHS = 300
 LR = 1e-4
 TIMESTEPS = 500
 DEVICE = init_gpu_environment()
@@ -54,6 +54,8 @@ DFN_DIR = DATA_DIR / "dfn_data" / "images"
 CSV_PATH = DATA_DIR / "dfn_data" / "labels.csv"
 DEFAULT_MIN_FRACTURES = 10
 DEFAULT_MAX_FRACTURES = 29
+DEFAULT_MIN_MEAN_MU = -90.0
+DEFAULT_MAX_MEAN_MU = 90.0
 
 
 def get_fracture_condition_range(csv_path: Path) -> Tuple[int, int]:
@@ -65,6 +67,18 @@ def get_fracture_condition_range(csv_path: Path) -> Tuple[int, int]:
     max_fractures = int(df["num_fractures"].max())
     logger.info(f"min_fractures: {min_fractures}, max_fractures: {max_fractures}")
     return min_fractures, max_fractures
+
+
+def get_mean_mu_range(csv_path: Path) -> Tuple[float, float]:
+    if not csv_path.exists():
+        return DEFAULT_MIN_MEAN_MU, DEFAULT_MAX_MEAN_MU
+
+    df = pd.read_csv(csv_path, usecols=["mean_mu"])
+    min_mu = float(df["mean_mu"].min())
+    max_mu = float(df["mean_mu"].max())
+    logger.info(f"observed mean_mu range: [{min_mu:.4f}, {max_mu:.4f}]")
+    return min_mu, max_mu
+
 
 # =====================================
 # Dataset
@@ -96,12 +110,19 @@ class DFNDataset(Dataset):
         img = self.transform(img)
 
         fracture_count = int(row["num_fractures"])
+        mean_mu = float(row["mean_mu"])
 
-        return img, fracture_count
+        return img, fracture_count, mean_mu
 
 
 class ConditionalUNet(UNet2DModel):
-    def __init__(self, min_fractures: int, max_fractures: int):
+    def __init__(
+        self,
+        min_fractures: int,
+        max_fractures: int,
+        min_mean_mu: float = DEFAULT_MIN_MEAN_MU,
+        max_mean_mu: float = DEFAULT_MAX_MEAN_MU,
+    ):
         num_class_embeds = max_fractures - min_fractures + 1
 
         super().__init__(
@@ -122,6 +143,17 @@ class ConditionalUNet(UNet2DModel):
 
         self.min_fractures = min_fractures
         self.max_fractures = max_fractures
+        self.min_mean_mu = min_mean_mu
+        self.max_mean_mu = max_mean_mu
+        self.time_embed_dim = self.time_embedding.linear_2.out_features
+
+        # Mu is a continuous angular condition, so we project periodic angle features
+        # into the same embedding space as the timestep embedding.
+        self.mu_embedding = nn.Sequential(
+            nn.Linear(2, self.time_embed_dim),
+            nn.SiLU(),
+            nn.Linear(self.time_embed_dim, self.time_embed_dim),
+        )
 
     def _fracture_counts_to_class_labels(
         self,
@@ -130,7 +162,9 @@ class ConditionalUNet(UNet2DModel):
         device: torch.device,
     ) -> torch.Tensor:
         if fracture_counts is None:
-            raise ValueError("fracture_counts must be provided for conditional generation")
+            raise ValueError(
+                "fracture_counts must be provided for conditional generation"
+            )
 
         if not torch.is_tensor(fracture_counts):
             fracture_counts = torch.tensor(fracture_counts, device=device)
@@ -158,25 +192,148 @@ class ConditionalUNet(UNet2DModel):
 
         return fracture_counts - self.min_fractures
 
+    def _prepare_mean_mus(
+        self,
+        mean_mus: Optional[torch.Tensor],
+        batch_size: int,
+        device: torch.device,
+    ) -> torch.Tensor:
+        if mean_mus is None:
+            raise ValueError("mean_mus must be provided for conditional generation")
+
+        if not torch.is_tensor(mean_mus):
+            mean_mus = torch.tensor(mean_mus, device=device)
+
+        mean_mus = mean_mus.to(device=device, dtype=torch.float32)
+
+        if mean_mus.ndim == 0:
+            mean_mus = mean_mus.unsqueeze(0)
+
+        if mean_mus.shape[0] == 1 and batch_size > 1:
+            mean_mus = mean_mus.expand(batch_size)
+        elif mean_mus.shape[0] != batch_size:
+            raise ValueError(
+                f"Expected {batch_size} mean_mus, but received {mean_mus.shape[0]}"
+            )
+
+        min_value = float(mean_mus.min().item())
+        max_value = float(mean_mus.max().item())
+        tolerance = 1e-4
+
+        if (
+            min_value < self.min_mean_mu - tolerance
+            or max_value > self.max_mean_mu + tolerance
+        ):
+            raise ValueError(
+                f"mean_mus must be in [{self.min_mean_mu}, {self.max_mean_mu}], "
+                f"but received values in [{min_value}, {max_value}]"
+            )
+
+        return mean_mus
+
+    def _encode_mean_mus(self, mean_mus: torch.Tensor) -> torch.Tensor:
+        mean_mus = mean_mus.to(dtype=self.dtype)
+        mu_radians = mean_mus * torch.pi / 180.0
+
+        # A fracture orientation repeats every 180 degrees, so use sin/cos(2 * mu).
+        periodic_radians = 2.0 * mu_radians
+        mu_features = torch.stack(
+            [
+                torch.sin(periodic_radians),
+                torch.cos(periodic_radians),
+            ],
+            dim=-1,
+        )
+        return self.mu_embedding(mu_features)
+
     def forward(
         self,
         noisy_images: torch.Tensor,
         timesteps: Union[torch.Tensor, float, int],
         fracture_counts: Optional[torch.Tensor] = None,
+        mean_mus: Optional[torch.Tensor] = None,
         return_dict: bool = True,
     ) -> Union[UNet2DOutput, Tuple]:
-        # Let the parent UNet add fracture-count embedding to the timestep embedding.
         class_labels = self._fracture_counts_to_class_labels(
             fracture_counts=fracture_counts,
             batch_size=noisy_images.shape[0],
             device=noisy_images.device,
         )
-        return super().forward(
-            sample=noisy_images,
-            timestep=timesteps,
-            class_labels=class_labels,
-            return_dict=return_dict,
+        mean_mus = self._prepare_mean_mus(
+            mean_mus=mean_mus,
+            batch_size=noisy_images.shape[0],
+            device=noisy_images.device,
         )
+
+        sample = noisy_images
+        if self.config.center_input_sample:
+            sample = 2 * sample - 1.0
+
+        if not torch.is_tensor(timesteps):
+            timesteps = torch.tensor(
+                [timesteps], dtype=torch.long, device=sample.device
+            )
+        elif len(timesteps.shape) == 0:
+            timesteps = timesteps[None].to(sample.device)
+
+        timesteps = timesteps * torch.ones(
+            sample.shape[0], dtype=timesteps.dtype, device=timesteps.device
+        )
+        t_emb = self.time_proj(timesteps)
+        t_emb = t_emb.to(dtype=self.dtype)
+        emb = self.time_embedding(t_emb)
+
+        class_emb = self.class_embedding(class_labels).to(dtype=self.dtype)
+        mu_emb = self._encode_mean_mus(mean_mus)
+        emb = emb + class_emb + mu_emb
+
+        skip_sample = sample
+        sample = self.conv_in(sample)
+
+        down_block_res_samples = (sample,)
+        for downsample_block in self.down_blocks:
+            if hasattr(downsample_block, "skip_conv"):
+                sample, res_samples, skip_sample = downsample_block(
+                    hidden_states=sample, temb=emb, skip_sample=skip_sample
+                )
+            else:
+                sample, res_samples = downsample_block(hidden_states=sample, temb=emb)
+
+            down_block_res_samples += res_samples
+
+        sample = self.mid_block(sample, emb)
+
+        skip_sample = None
+        for upsample_block in self.up_blocks:
+            res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
+            down_block_res_samples = down_block_res_samples[
+                : -len(upsample_block.resnets)
+            ]
+
+            if hasattr(upsample_block, "skip_conv"):
+                sample, skip_sample = upsample_block(
+                    sample, res_samples, emb, skip_sample
+                )
+            else:
+                sample = upsample_block(sample, res_samples, emb)
+
+        sample = self.conv_norm_out(sample)
+        sample = self.conv_act(sample)
+        sample = self.conv_out(sample)
+
+        if skip_sample is not None:
+            sample += skip_sample
+
+        if self.config.time_embedding_type == "fourier":
+            timesteps = timesteps.reshape(
+                (sample.shape[0], *([1] * len(sample.shape[1:])))
+            )
+            sample = sample / timesteps
+
+        if not return_dict:
+            return (sample,)
+
+        return UNet2DOutput(sample=sample)
 
 
 # =====================================
@@ -212,15 +369,23 @@ def train_model(train_loader, model: ConditionalUNet, optimizer, noise_scheduler
     for epoch in range(start_epoch, end_epoch):
         model.train()
         avg_loss = 0.0
-        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{end_epoch}", leave=False)
-        for batch_idx, (images, fracture_count) in enumerate(progress_bar):
+        progress_bar = tqdm(
+            train_loader, desc=f"Epoch {epoch + 1}/{end_epoch}", leave=False
+        )
+        for batch_idx, (images, fracture_count, mean_mu) in enumerate(progress_bar):
             images = images.to(DEVICE)
             fracture_count = fracture_count.to(DEVICE)
+            mean_mu = mean_mu.to(DEVICE)
             noise = torch.randn_like(images)
             batch_size = images.shape[0]
             timesteps = torch.randint(0, TIMESTEPS, (batch_size,), device=DEVICE).long()
             noisy_images = noise_scheduler.add_noise(images, noise, timesteps)
-            noise_pred = model(noisy_images, timesteps, fracture_count).sample
+            noise_pred = model.forward(
+                noisy_images,
+                timesteps,
+                fracture_counts=fracture_count,
+                mean_mus=mean_mu,
+            ).sample
             loss = F.mse_loss(noise_pred, noise)
             loss.backward()
             optimizer.step()
@@ -253,8 +418,9 @@ def train_model(train_loader, model: ConditionalUNet, optimizer, noise_scheduler
     )
 
 
-def generate(model: ConditionalUNet, target_n: str):
+def generate(model: ConditionalUNet, target_n: str, target_mu: str):
     fracture_count = int(target_n)
+    mean_mu = float(target_mu)
 
     if fracture_count < model.min_fractures or fracture_count > model.max_fractures:
         logger.warning(
@@ -262,11 +428,22 @@ def generate(model: ConditionalUNet, target_n: str):
         )
         return
 
+    if mean_mu < model.min_mean_mu or mean_mu > model.max_mean_mu:
+        logger.warning(f"mean_mu 必须在 {model.min_mean_mu}-{model.max_mean_mu} 之间")
+        return
+
     if not LATEST_MODEL_PATH.exists():
         logger.warning("未找到模型文件，请先训练模型。")
         return
 
-    fracture_counts = torch.full((16,), fracture_count, dtype=torch.long, device=DEVICE)
+    image_num = 9
+    image_width_num = 3
+    fracture_counts = torch.full(
+        (image_width_num**2,), fracture_count, dtype=torch.long, device=DEVICE
+    )
+    mean_mus = torch.full(
+        (image_width_num**2,), mean_mu, dtype=torch.float32, device=DEVICE
+    )
 
     # 加载本地保存的模型文件
     checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE, weights_only=False)
@@ -276,22 +453,43 @@ def generate(model: ConditionalUNet, target_n: str):
 
     scheduler.set_timesteps(TIMESTEPS)
 
-    images = torch.randn((16, 1, 128, 128), device=DEVICE)
+    images = torch.randn((image_width_num**2, 1, 128, 128), device=DEVICE)
     logger.info("开始生成图片")
     for t in scheduler.timesteps:
         with torch.no_grad():
-            noise_pred = model.forward(images, t, fracture_counts).sample
+            noise_pred = model(
+                images,
+                t,
+                fracture_counts=fracture_counts,
+                mean_mus=mean_mus,
+            ).sample
 
         images = scheduler.step(noise_pred, t, images).prev_sample
     images = (images + 1) / 2
     images = images.clamp(0, 1)
     images = images.cpu()
-    fig, axes = plt.subplots(4, 4, figsize=(8, 8))
+    fig, axes = plt.subplots(
+        image_width_num,
+        image_width_num,
+        figsize=(image_width_num * 2, image_width_num * 2),
+        gridspec_kw={"wspace": 0.1, "hspace": 0.1},
+    )
+    fig.subplots_adjust(left=0, right=1, top=0.88, bottom=0)
+    fig.suptitle(
+        f"fracture number: {fracture_count}, mean_mu: {mean_mu}",
+        color="white",
+        fontsize=12,
+        y=0.95,
+    )
+    fig.patch.set_facecolor("black")
     for i, ax in enumerate(axes.flat):
         ax.imshow(images[i, 0], cmap="gray")
         ax.axis("off")
-    plt.tight_layout()
-    plt.savefig(IMAGE_DIR / f"generated_dfn_{get_current_time()}.png")
+    mu_tag = f"{mean_mu:.1f}".replace("-", "neg").replace(".", "_")
+    plt.savefig(
+        IMAGE_DIR
+        / f"generated_dfn_n_{fracture_count}_mu_{mu_tag}_{get_current_time()}.png"
+    )
     logger.info("图片生成完毕")
 
 
@@ -397,10 +595,17 @@ def generate_loss_plot():
 
 def main():
     min_fractures, max_fractures = get_fracture_condition_range(CSV_PATH)
+    observed_min_mu, observed_max_mu = get_mean_mu_range(CSV_PATH)
     model = ConditionalUNet(
         min_fractures=min_fractures,
         max_fractures=max_fractures,
+        min_mean_mu=DEFAULT_MIN_MEAN_MU,
+        max_mean_mu=DEFAULT_MAX_MEAN_MU,
     ).to(DEVICE)
+    logger.info(
+        f"mean_mu observed in dataset: [{observed_min_mu:.4f}, {observed_max_mu:.4f}], "
+        f"supported input range: [{model.min_mean_mu:.1f}, {model.max_mean_mu:.1f}]"
+    )
 
     noise_scheduler = DDPMScheduler(num_train_timesteps=TIMESTEPS)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
@@ -433,14 +638,32 @@ def main():
         elif choice == "2":
             while True:
                 logger.info("  [0/exit] 返回主菜单")
-                target_n = input(
-                    f"输入{model.min_fractures}-{model.max_fractures}之间的数字: "
-                ).strip().lower()
-                
+                target_n = (
+                    input(
+                        f"输入{model.min_fractures}-{model.max_fractures}之间的数字: "
+                    )
+                    .strip()
+                    .lower()
+                )
+
                 if target_n in ["0", "exit"]:
                     break
-                else:
-                    generate(model, target_n)
+
+                target_mu = (
+                    input(
+                        f"输入{model.min_mean_mu:.1f}到{model.max_mean_mu:.1f}之间的 mean_mu: "
+                    )
+                    .strip()
+                    .lower()
+                )
+
+                if target_mu in ["0", "exit"]:
+                    break
+
+                try:
+                    generate(model, target_n, target_mu)
+                except ValueError:
+                    logger.warning("请输入有效的裂缝数量和 mean_mu 数值")
         elif choice == "3":
             show_model_status()
         elif choice == "4":

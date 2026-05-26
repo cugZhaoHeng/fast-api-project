@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 import sys
 import time
+from typing import Optional, Tuple, Union
 from PIL import Image
 import pandas as pd
 
@@ -14,6 +15,7 @@ import torch.nn.functional as F
 from torchvision import transforms
 
 from diffusers import UNet2DModel, DDPMScheduler
+from diffusers.models.unets.unet_2d import UNet2DOutput
 
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -30,7 +32,7 @@ IMAGE_DIR = CURRENT_DIR / "images"
 MODEL_DIR = CURRENT_DIR / "models"
 os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
-LATEST_MODEL_PATH = MODEL_DIR / "latest_ddpm_dfn_model.pth"
+LATEST_MODEL_PATH = MODEL_DIR / "latest_ddpm_dfn_time_condition_model.pth"
 
 project_root_str = str(PROJECT_ROOT_DIR)
 if project_root_str not in sys.path:
@@ -44,12 +46,25 @@ from utils.date_util import get_current_time
 
 IMAGE_SIZE = 128
 BATCH_SIZE = 32
-NUM_EPOCHS = 1
+NUM_EPOCHS = 100
 LR = 1e-4
 TIMESTEPS = 500
 DEVICE = init_gpu_environment()
 DFN_DIR = DATA_DIR / "dfn_data" / "images"
 CSV_PATH = DATA_DIR / "dfn_data" / "labels.csv"
+DEFAULT_MIN_FRACTURES = 10
+DEFAULT_MAX_FRACTURES = 29
+
+
+def get_fracture_condition_range(csv_path: Path) -> Tuple[int, int]:
+    if not csv_path.exists():
+        return DEFAULT_MIN_FRACTURES, DEFAULT_MAX_FRACTURES
+
+    df = pd.read_csv(csv_path, usecols=["num_fractures"])
+    min_fractures = int(df["num_fractures"].min())
+    max_fractures = int(df["num_fractures"].max())
+    logger.info(f"min_fractures: {min_fractures}, max_fractures: {max_fractures}")
+    return min_fractures, max_fractures
 
 # =====================================
 # Dataset
@@ -80,30 +95,18 @@ class DFNDataset(Dataset):
 
         img = self.transform(img)
 
-        n = int(row["num_fractures"])
+        fracture_count = int(row["num_fractures"])
 
-        if n >= 10 and n <=15:
-            density = -1.0
-
-        elif n>15 and n < 25:
-            density = 0.0
-
-        else:
-            density = 1.0
-
-        density = torch.tensor([density], dtype=torch.float32)
-
-        return img, density
+        return img, fracture_count
 
 
-class ConditionalUNet(nn.Module):
-    def __init__(self):
+class ConditionalUNet(UNet2DModel):
+    def __init__(self, min_fractures: int, max_fractures: int):
+        num_class_embeds = max_fractures - min_fractures + 1
 
-        super().__init__()
-
-        self.unet = UNet2DModel(
+        super().__init__(
             sample_size=IMAGE_SIZE,
-            in_channels=2,
+            in_channels=1,
             out_channels=1,
             layers_per_block=2,
             block_out_channels=(64, 128, 256, 512),
@@ -114,21 +117,66 @@ class ConditionalUNet(nn.Module):
                 "AttnDownBlock2D",
             ),
             up_block_types=("AttnUpBlock2D", "UpBlock2D", "UpBlock2D", "UpBlock2D"),
+            num_class_embeds=num_class_embeds,
         )
 
-    def forward(self, noisy_images, timesteps, density):
+        self.min_fractures = min_fractures
+        self.max_fractures = max_fractures
 
-        B = noisy_images.shape[0]
-        H = noisy_images.shape[2]
-        W = noisy_images.shape[3]
+    def _fracture_counts_to_class_labels(
+        self,
+        fracture_counts: Optional[torch.Tensor],
+        batch_size: int,
+        device: torch.device,
+    ) -> torch.Tensor:
+        if fracture_counts is None:
+            raise ValueError("fracture_counts must be provided for conditional generation")
 
-        density_map = density.view(B, 1, 1, 1)
+        if not torch.is_tensor(fracture_counts):
+            fracture_counts = torch.tensor(fracture_counts, device=device)
 
-        density_map = density_map.expand(B, 1, H, W)
+        fracture_counts = fracture_counts.to(device=device, dtype=torch.long)
 
-        x = torch.cat([noisy_images, density_map], dim=1)
+        if fracture_counts.ndim == 0:
+            fracture_counts = fracture_counts.unsqueeze(0)
 
-        return self.unet(x, timesteps)
+        if fracture_counts.shape[0] == 1 and batch_size > 1:
+            fracture_counts = fracture_counts.expand(batch_size)
+        elif fracture_counts.shape[0] != batch_size:
+            raise ValueError(
+                f"Expected {batch_size} fracture counts, but received {fracture_counts.shape[0]}"
+            )
+
+        min_value = int(fracture_counts.min().item())
+        max_value = int(fracture_counts.max().item())
+
+        if min_value < self.min_fractures or max_value > self.max_fractures:
+            raise ValueError(
+                f"fracture_counts must be in [{self.min_fractures}, {self.max_fractures}], "
+                f"but received values in [{min_value}, {max_value}]"
+            )
+
+        return fracture_counts - self.min_fractures
+
+    def forward(
+        self,
+        noisy_images: torch.Tensor,
+        timesteps: Union[torch.Tensor, float, int],
+        fracture_counts: Optional[torch.Tensor] = None,
+        return_dict: bool = True,
+    ) -> Union[UNet2DOutput, Tuple]:
+        # Let the parent UNet add fracture-count embedding to the timestep embedding.
+        class_labels = self._fracture_counts_to_class_labels(
+            fracture_counts=fracture_counts,
+            batch_size=noisy_images.shape[0],
+            device=noisy_images.device,
+        )
+        return super().forward(
+            sample=noisy_images,
+            timestep=timesteps,
+            class_labels=class_labels,
+            return_dict=return_dict,
+        )
 
 
 # =====================================
@@ -165,14 +213,14 @@ def train_model(train_loader, model: ConditionalUNet, optimizer, noise_scheduler
         model.train()
         avg_loss = 0.0
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{end_epoch}", leave=False)
-        for batch_idx, (images, density) in enumerate(progress_bar):
+        for batch_idx, (images, fracture_count) in enumerate(progress_bar):
             images = images.to(DEVICE)
-            density = density.to(DEVICE)
+            fracture_count = fracture_count.to(DEVICE)
             noise = torch.randn_like(images)
             batch_size = images.shape[0]
             timesteps = torch.randint(0, TIMESTEPS, (batch_size,), device=DEVICE).long()
             noisy_images = noise_scheduler.add_noise(images, noise, timesteps)
-            noise_pred = model.forward(noisy_images, timesteps, density).sample
+            noise_pred = model(noisy_images, timesteps, fracture_count).sample
             loss = F.mse_loss(noise_pred, noise)
             loss.backward()
             optimizer.step()
@@ -205,31 +253,34 @@ def train_model(train_loader, model: ConditionalUNet, optimizer, noise_scheduler
     )
 
 
-def generate(model: ConditionalUNet, density_type="high"):
-    if density_type == "low":
-        density_value = -1.0
+def generate(model: ConditionalUNet, target_n: str):
+    fracture_count = int(target_n)
 
-    elif density_type == "mid":
-        density_value = 0.0
+    if fracture_count < model.min_fractures or fracture_count > model.max_fractures:
+        logger.warning(
+            f"裂缝数量必须在 {model.min_fractures}-{model.max_fractures} 之间"
+        )
+        return
 
-    else:
-        density_value = 1.0
+    if not LATEST_MODEL_PATH.exists():
+        logger.warning("未找到模型文件，请先训练模型。")
+        return
 
-    density = torch.full((16, 1), density_value, device=DEVICE)
-    
+    fracture_counts = torch.full((16,), fracture_count, dtype=torch.long, device=DEVICE)
+
     # 加载本地保存的模型文件
     checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE, weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.eval()
-    scheduler = DDPMScheduler(num_train_timesteps=1000)
+    scheduler = DDPMScheduler(num_train_timesteps=TIMESTEPS)
 
-    scheduler.set_timesteps(1000)
+    scheduler.set_timesteps(TIMESTEPS)
 
     images = torch.randn((16, 1, 128, 128), device=DEVICE)
     logger.info("开始生成图片")
     for t in scheduler.timesteps:
         with torch.no_grad():
-            noise_pred = model.forward(images, t, density).sample
+            noise_pred = model.forward(images, t, fracture_counts).sample
 
         images = scheduler.step(noise_pred, t, images).prev_sample
     images = (images + 1) / 2
@@ -345,7 +396,11 @@ def generate_loss_plot():
 
 
 def main():
-    model = ConditionalUNet().to(DEVICE)
+    min_fractures, max_fractures = get_fracture_condition_range(CSV_PATH)
+    model = ConditionalUNet(
+        min_fractures=min_fractures,
+        max_fractures=max_fractures,
+    ).to(DEVICE)
 
     noise_scheduler = DDPMScheduler(num_train_timesteps=TIMESTEPS)
     optimizer = torch.optim.AdamW(model.parameters(), lr=LR)
@@ -372,27 +427,20 @@ def main():
                 dataset,
                 batch_size=BATCH_SIZE,
                 shuffle=True,
-                num_workers=4,
                 pin_memory=True,
             )
             train_model(train_loader, model, optimizer, noise_scheduler)
         elif choice == "2":
             while True:
-                logger.info(" [1] Generate Low Density")
-                logger.info(" [2] Generate Mid Density")
-                logger.info(" [3] Generate High Density")
                 logger.info("  [0/exit] 返回主菜单")
-                sub_choice = input("  请选择测试功能: ").strip().lower()
-                if sub_choice == "1":
-                    generate(model, "low")
-                elif sub_choice == "2":
-                    generate(model, "mid")
-                elif sub_choice == "3":
-                    generate(model, "high")
-                elif sub_choice in ["0", "exit"]:
+                target_n = input(
+                    f"输入{model.min_fractures}-{model.max_fractures}之间的数字: "
+                ).strip().lower()
+                
+                if target_n in ["0", "exit"]:
                     break
                 else:
-                    logger.info("  无效输入。")
+                    generate(model, target_n)
         elif choice == "3":
             show_model_status()
         elif choice == "4":

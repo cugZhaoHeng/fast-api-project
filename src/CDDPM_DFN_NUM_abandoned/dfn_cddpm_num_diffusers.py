@@ -44,7 +44,7 @@ from utils.date_util import get_current_time
 
 IMAGE_SIZE = 128
 BATCH_SIZE = 32
-NUM_EPOCHS = 1
+NUM_EPOCHS = 50
 LR = 1e-4
 TIMESTEPS = 500
 DEVICE = init_gpu_environment()
@@ -82,18 +82,9 @@ class DFNDataset(Dataset):
 
         n = int(row["num_fractures"])
 
-        if n >= 10 and n <=15:
-            density = -1.0
+        class_id = n - 10
 
-        elif n>15 and n < 25:
-            density = 0.0
-
-        else:
-            density = 1.0
-
-        density = torch.tensor([density], dtype=torch.float32)
-
-        return img, density
+        return img, class_id
 
 
 class ConditionalUNet(nn.Module):
@@ -101,9 +92,11 @@ class ConditionalUNet(nn.Module):
 
         super().__init__()
 
+        self.condition_embedding = nn.Embedding(21, 32)
+
         self.unet = UNet2DModel(
             sample_size=IMAGE_SIZE,
-            in_channels=2,
+            in_channels=33,
             out_channels=1,
             layers_per_block=2,
             block_out_channels=(64, 128, 256, 512),
@@ -116,17 +109,17 @@ class ConditionalUNet(nn.Module):
             up_block_types=("AttnUpBlock2D", "UpBlock2D", "UpBlock2D", "UpBlock2D"),
         )
 
-    def forward(self, noisy_images, timesteps, density):
+    def forward(self, noisy_images, timesteps, class_id):
 
-        B = noisy_images.shape[0]
-        H = noisy_images.shape[2]
-        W = noisy_images.shape[3]
+        B, H, W = noisy_images.shape[0], noisy_images.shape[2], noisy_images.shape[3]
 
-        density_map = density.view(B, 1, 1, 1)
+        cond = self.condition_embedding(class_id)
 
-        density_map = density_map.expand(B, 1, H, W)
+        cond = cond[:, :, None, None]
 
-        x = torch.cat([noisy_images, density_map], dim=1)
+        cond = cond.expand(-1, -1, H, W)
+
+        x = torch.cat([noisy_images, cond], dim=1)
 
         return self.unet(x, timesteps)
 
@@ -164,22 +157,20 @@ def train_model(train_loader, model: ConditionalUNet, optimizer, noise_scheduler
     for epoch in range(start_epoch, end_epoch):
         model.train()
         avg_loss = 0.0
-        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{end_epoch}", leave=False)
-        for batch_idx, (images, density) in enumerate(progress_bar):
+        for batch_idx, (images, class_id) in enumerate(train_loader):
             images = images.to(DEVICE)
-            density = density.to(DEVICE)
+            class_id = class_id.to(DEVICE)
             noise = torch.randn_like(images)
             batch_size = images.shape[0]
             timesteps = torch.randint(0, TIMESTEPS, (batch_size,), device=DEVICE).long()
             noisy_images = noise_scheduler.add_noise(images, noise, timesteps)
-            noise_pred = model.forward(noisy_images, timesteps, density).sample
+            noise_pred = model.forward(noisy_images, timesteps, class_id).sample
             loss = F.mse_loss(noise_pred, noise)
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             avg_loss = (avg_loss * batch_idx + loss.item()) / (batch_idx + 1)
-            progress_bar.set_postfix(loss=loss.item(), avg_loss=avg_loss)
 
         loss_list.append(avg_loss)
         logger.info(
@@ -205,18 +196,11 @@ def train_model(train_loader, model: ConditionalUNet, optimizer, noise_scheduler
     )
 
 
-def generate(model: ConditionalUNet, density_type="high"):
-    if density_type == "low":
-        density_value = -1.0
+def generate(model: ConditionalUNet, target_n: str):
+    class_id = int(target_n) - 10
 
-    elif density_type == "mid":
-        density_value = 0.0
+    class_ids = torch.full((16,), class_id, dtype=torch.long, device=DEVICE)
 
-    else:
-        density_value = 1.0
-
-    density = torch.full((16, 1), density_value, device=DEVICE)
-    
     # 加载本地保存的模型文件
     checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE, weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
@@ -229,7 +213,7 @@ def generate(model: ConditionalUNet, density_type="high"):
     logger.info("开始生成图片")
     for t in scheduler.timesteps:
         with torch.no_grad():
-            noise_pred = model.forward(images, t, density).sample
+            noise_pred = model.forward(images, t, class_ids).sample
 
         images = scheduler.step(noise_pred, t, images).prev_sample
     images = (images + 1) / 2
@@ -378,21 +362,13 @@ def main():
             train_model(train_loader, model, optimizer, noise_scheduler)
         elif choice == "2":
             while True:
-                logger.info(" [1] Generate Low Density")
-                logger.info(" [2] Generate Mid Density")
-                logger.info(" [3] Generate High Density")
                 logger.info("  [0/exit] 返回主菜单")
-                sub_choice = input("  请选择测试功能: ").strip().lower()
-                if sub_choice == "1":
-                    generate(model, "low")
-                elif sub_choice == "2":
-                    generate(model, "mid")
-                elif sub_choice == "3":
-                    generate(model, "high")
-                elif sub_choice in ["0", "exit"]:
+                target_n = input("输入10-30之间的数字: ").strip().lower()
+                
+                if target_n in ["0", "exit"]:
                     break
                 else:
-                    logger.info("  无效输入。")
+                    generate(model, target_n)
         elif choice == "3":
             show_model_status()
         elif choice == "4":
