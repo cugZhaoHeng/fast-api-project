@@ -1,0 +1,870 @@
+
+pytorch2.9.1+cu128:Êî
+
+x
+stem.0.weightgetitemnode_Conv_133"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†J’
+	namespace«: __main__.ResNetMNIST/stem: torch.nn.modules.container.Sequential/stem.1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJ¬
+pkg.torch.onnx.class_hierarchyü['__main__.ResNetMNIST', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']J§
+pkg.torch.onnx.fx_nodeâ%_native_batch_norm_legit_functional : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d, %p_stem_1_weight, %p_stem_1_bias, %b_stem_1_running_mean, %b_stem_1_running_var, True, 0.1, 1e-05), kwargs = {})J[
+pkg.torch.onnx.name_scopes=['', 'stem', 'stem.1', '_native_batch_norm_legit_functional']J 
+pkg.torch.onnx.stack_trace´File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 139, in forward
+    x = self.stem(x)         # ÂàùÂßãÂ§ÑÁêÜ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+¸
+getitemrelu	node_relu"ReluJë
+	namespaceÉ: __main__.ResNetMNIST/stem: torch.nn.modules.container.Sequential/stem.2: torch.nn.modules.activation.ReLU/relu: aten.relu.defaultJú
+pkg.torch.onnx.class_hierarchyz['__main__.ResNetMNIST', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']JÑ
+pkg.torch.onnx.fx_nodej%relu : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%getitem,), kwargs = {})J<
+pkg.torch.onnx.name_scopes['', 'stem', 'stem.2', 'relu']J·
+pkg.torch.onnx.stack_trace¬File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 139, in forward
+    x = self.stem(x)         # ÂàùÂßãÂ§ÑÁêÜ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+∂
+relu
+stage1.first_block.conv1.weight	getitem_5node_Conv_136"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†JÄ
+	namespaceÚ: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.first_block: __main__.BasicBlock/stage1.first_block.bn1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_1: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJ»
+pkg.torch.onnx.class_hierarchy•['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']JË
+pkg.torch.onnx.fx_nodeÕ%_native_batch_norm_legit_functional_1 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_1, %p_stage1_first_block_bn1_weight, %p_stage1_first_block_bn1_bias, %b_stage1_first_block_bn1_running_mean, %b_stage1_first_block_bn1_running_var, True, 0.1, 1e-05), kwargs = {})JÖ
+pkg.torch.onnx.name_scopesg['', 'stage1', 'stage1.first_block', 'stage1.first_block.bn1', '_native_batch_norm_legit_functional_1']JŸ
+pkg.torch.onnx.stack_trace∫File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 60, in forward
+    out = self.bn1(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+Ù	
+	getitem_5relu_1node_relu_1"ReluJΩ
+	namespaceØ: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.first_block: __main__.BasicBlock/stage1.first_block.relu: torch.nn.modules.activation.ReLU/relu_1: aten.relu.defaultJ£
+pkg.torch.onnx.class_hierarchyÄ['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jà
+pkg.torch.onnx.fx_noden%relu_1 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_5,), kwargs = {})Jg
+pkg.torch.onnx.name_scopesI['', 'stage1', 'stage1.first_block', 'stage1.first_block.relu', 'relu_1']JÒ
+pkg.torch.onnx.stack_trace“File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 61, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+π
+relu_1
+stage1.first_block.conv2.weight
+getitem_10node_Conv_139"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†JÄ
+	namespaceÚ: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.first_block: __main__.BasicBlock/stage1.first_block.bn2: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_2: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJ»
+pkg.torch.onnx.class_hierarchy•['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']JË
+pkg.torch.onnx.fx_nodeÕ%_native_batch_norm_legit_functional_2 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_2, %p_stage1_first_block_bn2_weight, %p_stage1_first_block_bn2_bias, %b_stage1_first_block_bn2_running_mean, %b_stage1_first_block_bn2_running_var, True, 0.1, 1e-05), kwargs = {})JÖ
+pkg.torch.onnx.name_scopesg['', 'stage1', 'stage1.first_block', 'stage1.first_block.bn2', '_native_batch_norm_legit_functional_2']JŸ
+pkg.torch.onnx.stack_trace∫File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 64, in forward
+    out = self.bn2(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+Ö
+
+getitem_10
+reluadd_3
+node_add_3"AddJ
+	namespacer: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.first_block: __main__.BasicBlock/add_3: aten.add.TensorJ|
+pkg.torch.onnx.class_hierarchyZ['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'aten.add.Tensor']Jå
+pkg.torch.onnx.fx_noder%add_3 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_10, %relu), kwargs = {})JK
+pkg.torch.onnx.name_scopes-['', 'stage1', 'stage1.first_block', 'add_3']J˝
+pkg.torch.onnx.stack_traceﬁFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 67, in forward
+    out += identity  # Â∞ÜÂÆû‰π†ÁîüÊèêÂèñÁöÑÂ∑ÆÂºÇÔºåÂè†Âä†Âà∞ËÄÅÊùøÁöÑÂéüÁ®ø‰∏ä
+Ï	
+add_3relu_2node_relu_2"ReluJΩ
+	namespaceØ: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.first_block: __main__.BasicBlock/stage1.first_block.relu: torch.nn.modules.activation.ReLU/relu_2: aten.relu.defaultJ£
+pkg.torch.onnx.class_hierarchyÄ['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']JÑ
+pkg.torch.onnx.fx_nodej%relu_2 : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%add_3,), kwargs = {})Jg
+pkg.torch.onnx.name_scopesI['', 'stage1', 'stage1.first_block', 'stage1.first_block.relu', 'relu_2']JÒ
+pkg.torch.onnx.stack_trace“File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 70, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+¿
+relu_2
+!stage1.rest_blocks.0.conv1.weight
+getitem_15node_Conv_142"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†Jæ
+	namespace∞: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.rest_blocks: torch.nn.modules.container.Sequential/stage1.rest_blocks.0: __main__.BasicBlock/stage1.rest_blocks.0.bn1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_3: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJÒ
+pkg.torch.onnx.class_hierarchyŒ['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']J
+pkg.torch.onnx.fx_node’%_native_batch_norm_legit_functional_3 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_3, %p_stage1_rest_blocks_0_bn1_weight, %p_stage1_rest_blocks_0_bn1_bias, %b_stage1_rest_blocks_0_bn1_running_mean, %b_stage1_rest_blocks_0_bn1_running_var, True, 0.1, 1e-05), kwargs = {})J†
+pkg.torch.onnx.name_scopesÅ['', 'stage1', 'stage1.rest_blocks', 'stage1.rest_blocks.0', 'stage1.rest_blocks.0.bn1', '_native_batch_norm_legit_functional_3']J‘
+pkg.torch.onnx.stack_traceµFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 60, in forward
+    out = self.bn1(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+Û
+
+getitem_15relu_3node_relu_3"ReluJ˚
+	namespaceÌ: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.rest_blocks: torch.nn.modules.container.Sequential/stage1.rest_blocks.0: __main__.BasicBlock/stage1.rest_blocks.0.relu: torch.nn.modules.activation.ReLU/relu_3: aten.relu.defaultJÃ
+pkg.torch.onnx.class_hierarchy©['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_3 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_15,), kwargs = {})JÅ
+pkg.torch.onnx.name_scopesc['', 'stage1', 'stage1.rest_blocks', 'stage1.rest_blocks.0', 'stage1.rest_blocks.0.relu', 'relu_3']JÏ
+pkg.torch.onnx.stack_traceÕFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 61, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+¿
+relu_3
+!stage1.rest_blocks.0.conv2.weight
+getitem_20node_Conv_145"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†Jæ
+	namespace∞: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.rest_blocks: torch.nn.modules.container.Sequential/stage1.rest_blocks.0: __main__.BasicBlock/stage1.rest_blocks.0.bn2: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_4: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJÒ
+pkg.torch.onnx.class_hierarchyŒ['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']J
+pkg.torch.onnx.fx_node’%_native_batch_norm_legit_functional_4 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_4, %p_stage1_rest_blocks_0_bn2_weight, %p_stage1_rest_blocks_0_bn2_bias, %b_stage1_rest_blocks_0_bn2_running_mean, %b_stage1_rest_blocks_0_bn2_running_var, True, 0.1, 1e-05), kwargs = {})J†
+pkg.torch.onnx.name_scopesÅ['', 'stage1', 'stage1.rest_blocks', 'stage1.rest_blocks.0', 'stage1.rest_blocks.0.bn2', '_native_batch_norm_legit_functional_4']J‘
+pkg.torch.onnx.stack_traceµFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 64, in forward
+    out = self.bn2(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+Ö
+
+
+getitem_20
+relu_2add_6
+node_add_6"AddJº
+	namespaceÆ: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.rest_blocks: torch.nn.modules.container.Sequential/stage1.rest_blocks.0: __main__.BasicBlock/add_6: aten.add.TensorJ¶
+pkg.torch.onnx.class_hierarchyÉ['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'aten.add.Tensor']Jé
+pkg.torch.onnx.fx_nodet%add_6 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_20, %relu_2), kwargs = {})Jc
+pkg.torch.onnx.name_scopesE['', 'stage1', 'stage1.rest_blocks', 'stage1.rest_blocks.0', 'add_6']J¯
+pkg.torch.onnx.stack_traceŸFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 67, in forward
+    out += identity  # Â∞ÜÂÆû‰π†ÁîüÊèêÂèñÁöÑÂ∑ÆÂºÇÔºåÂè†Âä†Âà∞ËÄÅÊùøÁöÑÂéüÁ®ø‰∏ä
+È
+add_6relu_4node_relu_4"ReluJ˚
+	namespaceÌ: __main__.ResNetMNIST/stage1: __main__.ResNetStage/stage1.rest_blocks: torch.nn.modules.container.Sequential/stage1.rest_blocks.0: __main__.BasicBlock/stage1.rest_blocks.0.relu: torch.nn.modules.activation.ReLU/relu_4: aten.relu.defaultJÃ
+pkg.torch.onnx.class_hierarchy©['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']JÑ
+pkg.torch.onnx.fx_nodej%relu_4 : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%add_6,), kwargs = {})JÅ
+pkg.torch.onnx.name_scopesc['', 'stage1', 'stage1.rest_blocks', 'stage1.rest_blocks.0', 'stage1.rest_blocks.0.relu', 'relu_4']JÏ
+pkg.torch.onnx.stack_traceÕFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 140, in forward
+    x = self.stage1(x)       # Á¨¨‰∏ÄÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 70, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+í
+relu_4
+$stage2.first_block.shortcut.0.weight
+getitem_25node_Conv_148"Conv*
+group†*
+pads@ @ @ @ †*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†J 
+	namespaceº: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.first_block: __main__.BasicBlock/stage2.first_block.shortcut: torch.nn.modules.container.Sequential/stage2.first_block.shortcut.1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_5: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJÒ
+pkg.torch.onnx.class_hierarchyŒ['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']JÑ
+pkg.torch.onnx.fx_nodeÈ%_native_batch_norm_legit_functional_5 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_5, %p_stage2_first_block_shortcut_1_weight, %p_stage2_first_block_shortcut_1_bias, %b_stage2_first_block_shortcut_1_running_mean, %b_stage2_first_block_shortcut_1_running_var, True, 0.1, 1e-05), kwargs = {})J¨
+pkg.torch.onnx.name_scopesç['', 'stage2', 'stage2.first_block', 'stage2.first_block.shortcut', 'stage2.first_block.shortcut.1', '_native_batch_norm_legit_functional_5']J˜
+pkg.torch.onnx.stack_traceÿFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 56, in forward
+    identity = self.shortcut(x)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+π
+relu_4
+stage2.first_block.conv1.weight
+getitem_30node_Conv_151"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†JÄ
+	namespaceÚ: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.first_block: __main__.BasicBlock/stage2.first_block.bn1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_6: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJ»
+pkg.torch.onnx.class_hierarchy•['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']JË
+pkg.torch.onnx.fx_nodeÕ%_native_batch_norm_legit_functional_6 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_6, %p_stage2_first_block_bn1_weight, %p_stage2_first_block_bn1_bias, %b_stage2_first_block_bn1_running_mean, %b_stage2_first_block_bn1_running_var, True, 0.1, 1e-05), kwargs = {})JÖ
+pkg.torch.onnx.name_scopesg['', 'stage2', 'stage2.first_block', 'stage2.first_block.bn1', '_native_batch_norm_legit_functional_6']JŸ
+pkg.torch.onnx.stack_trace∫File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 60, in forward
+    out = self.bn1(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+ˆ	
+
+getitem_30relu_5node_relu_5"ReluJΩ
+	namespaceØ: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.first_block: __main__.BasicBlock/stage2.first_block.relu: torch.nn.modules.activation.ReLU/relu_5: aten.relu.defaultJ£
+pkg.torch.onnx.class_hierarchyÄ['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_5 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_30,), kwargs = {})Jg
+pkg.torch.onnx.name_scopesI['', 'stage2', 'stage2.first_block', 'stage2.first_block.relu', 'relu_5']JÒ
+pkg.torch.onnx.stack_trace“File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 61, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+π
+relu_5
+stage2.first_block.conv2.weight
+getitem_35node_Conv_154"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†JÄ
+	namespaceÚ: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.first_block: __main__.BasicBlock/stage2.first_block.bn2: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_7: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJ»
+pkg.torch.onnx.class_hierarchy•['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']JË
+pkg.torch.onnx.fx_nodeÕ%_native_batch_norm_legit_functional_7 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_7, %p_stage2_first_block_bn2_weight, %p_stage2_first_block_bn2_bias, %b_stage2_first_block_bn2_running_mean, %b_stage2_first_block_bn2_running_var, True, 0.1, 1e-05), kwargs = {})JÖ
+pkg.torch.onnx.name_scopesg['', 'stage2', 'stage2.first_block', 'stage2.first_block.bn2', '_native_batch_norm_legit_functional_7']JŸ
+pkg.torch.onnx.stack_trace∫File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 64, in forward
+    out = self.bn2(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+ó
+
+getitem_35
+
+getitem_25add_10node_add_10"AddJÄ
+	namespaces: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.first_block: __main__.BasicBlock/add_10: aten.add.TensorJ|
+pkg.torch.onnx.class_hierarchyZ['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'aten.add.Tensor']Jì
+pkg.torch.onnx.fx_nodey%add_10 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_35, %getitem_25), kwargs = {})JL
+pkg.torch.onnx.name_scopes.['', 'stage2', 'stage2.first_block', 'add_10']J˝
+pkg.torch.onnx.stack_traceﬁFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 67, in forward
+    out += identity  # Â∞ÜÂÆû‰π†ÁîüÊèêÂèñÁöÑÂ∑ÆÂºÇÔºåÂè†Âä†Âà∞ËÄÅÊùøÁöÑÂéüÁ®ø‰∏ä
+Ó	
+add_10relu_6node_relu_6"ReluJΩ
+	namespaceØ: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.first_block: __main__.BasicBlock/stage2.first_block.relu: torch.nn.modules.activation.ReLU/relu_6: aten.relu.defaultJ£
+pkg.torch.onnx.class_hierarchyÄ['__main__.ResNetMNIST', '__main__.ResNetStage', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']JÖ
+pkg.torch.onnx.fx_nodek%relu_6 : [num_users=2] = call_function[target=torch.ops.aten.relu.default](args = (%add_10,), kwargs = {})Jg
+pkg.torch.onnx.name_scopesI['', 'stage2', 'stage2.first_block', 'stage2.first_block.relu', 'relu_6']JÒ
+pkg.torch.onnx.stack_trace“File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 106, in forward
+    x = self.first_block(x)      # ÂÖàËøáÁ¨¨‰∏Ä‰∏™ÂùóÔºåÂÆåÊàêÂèØËÉΩÁöÑ‰∏ãÈááÊ†∑ÂíåÈÄöÈÅìÊâ©Âº†
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 70, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+¿
+relu_6
+!stage2.rest_blocks.0.conv1.weight
+getitem_40node_Conv_157"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†Jæ
+	namespace∞: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.rest_blocks: torch.nn.modules.container.Sequential/stage2.rest_blocks.0: __main__.BasicBlock/stage2.rest_blocks.0.bn1: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_8: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJÒ
+pkg.torch.onnx.class_hierarchyŒ['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']J
+pkg.torch.onnx.fx_node’%_native_batch_norm_legit_functional_8 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_8, %p_stage2_rest_blocks_0_bn1_weight, %p_stage2_rest_blocks_0_bn1_bias, %b_stage2_rest_blocks_0_bn1_running_mean, %b_stage2_rest_blocks_0_bn1_running_var, True, 0.1, 1e-05), kwargs = {})J†
+pkg.torch.onnx.name_scopesÅ['', 'stage2', 'stage2.rest_blocks', 'stage2.rest_blocks.0', 'stage2.rest_blocks.0.bn1', '_native_batch_norm_legit_functional_8']J‘
+pkg.torch.onnx.stack_traceµFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 60, in forward
+    out = self.bn1(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+Û
+
+getitem_40relu_7node_relu_7"ReluJ˚
+	namespaceÌ: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.rest_blocks: torch.nn.modules.container.Sequential/stage2.rest_blocks.0: __main__.BasicBlock/stage2.rest_blocks.0.relu: torch.nn.modules.activation.ReLU/relu_7: aten.relu.defaultJÃ
+pkg.torch.onnx.class_hierarchy©['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']Jâ
+pkg.torch.onnx.fx_nodeo%relu_7 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%getitem_40,), kwargs = {})JÅ
+pkg.torch.onnx.name_scopesc['', 'stage2', 'stage2.rest_blocks', 'stage2.rest_blocks.0', 'stage2.rest_blocks.0.relu', 'relu_7']JÏ
+pkg.torch.onnx.stack_traceÕFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 61, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+¿
+relu_7
+!stage2.rest_blocks.0.conv2.weight
+getitem_45node_Conv_160"Conv*
+group†*
+pads@@@@†*
+auto_pad"NOTSET†*
+strides@@†*
+	dilations@@†Jæ
+	namespace∞: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.rest_blocks: torch.nn.modules.container.Sequential/stage2.rest_blocks.0: __main__.BasicBlock/stage2.rest_blocks.0.bn2: torch.nn.modules.batchnorm.BatchNorm2d/_native_batch_norm_legit_functional_9: aten._native_batch_norm_legit_functional.defaultJr
+!pkg.onnxscript.rewriter.rule_nameMRemoveOptionalBiasFromConv, FuseBatchNormIntoConv, RemoveOptionalBiasFromConvJÒ
+pkg.torch.onnx.class_hierarchyŒ['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.batchnorm.BatchNorm2d', 'aten._native_batch_norm_legit_functional.default']J
+pkg.torch.onnx.fx_node’%_native_batch_norm_legit_functional_9 : [num_users=3] = call_function[target=torch.ops.aten._native_batch_norm_legit_functional.default](args = (%conv2d_9, %p_stage2_rest_blocks_0_bn2_weight, %p_stage2_rest_blocks_0_bn2_bias, %b_stage2_rest_blocks_0_bn2_running_mean, %b_stage2_rest_blocks_0_bn2_running_var, True, 0.1, 1e-05), kwargs = {})J†
+pkg.torch.onnx.name_scopesÅ['', 'stage2', 'stage2.rest_blocks', 'stage2.rest_blocks.0', 'stage2.rest_blocks.0.bn2', '_native_batch_norm_legit_functional_9']J‘
+pkg.torch.onnx.stack_traceµFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 64, in forward
+    out = self.bn2(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/batchnorm.py", line 193, in forward
+    return F.batch_norm(
+ä
+
+
+getitem_45
+relu_6add_13node_add_13"AddJΩ
+	namespaceØ: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.rest_blocks: torch.nn.modules.container.Sequential/stage2.rest_blocks.0: __main__.BasicBlock/add_13: aten.add.TensorJ¶
+pkg.torch.onnx.class_hierarchyÉ['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'aten.add.Tensor']Jè
+pkg.torch.onnx.fx_nodeu%add_13 : [num_users=1] = call_function[target=torch.ops.aten.add.Tensor](args = (%getitem_45, %relu_6), kwargs = {})Jd
+pkg.torch.onnx.name_scopesF['', 'stage2', 'stage2.rest_blocks', 'stage2.rest_blocks.0', 'add_13']J¯
+pkg.torch.onnx.stack_traceŸFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 67, in forward
+    out += identity  # Â∞ÜÂÆû‰π†ÁîüÊèêÂèñÁöÑÂ∑ÆÂºÇÔºåÂè†Âä†Âà∞ËÄÅÊùøÁöÑÂéüÁ®ø‰∏ä
+Î
+add_13relu_8node_relu_8"ReluJ˚
+	namespaceÌ: __main__.ResNetMNIST/stage2: __main__.ResNetStage/stage2.rest_blocks: torch.nn.modules.container.Sequential/stage2.rest_blocks.0: __main__.BasicBlock/stage2.rest_blocks.0.relu: torch.nn.modules.activation.ReLU/relu_8: aten.relu.defaultJÃ
+pkg.torch.onnx.class_hierarchy©['__main__.ResNetMNIST', '__main__.ResNetStage', 'torch.nn.modules.container.Sequential', '__main__.BasicBlock', 'torch.nn.modules.activation.ReLU', 'aten.relu.default']JÖ
+pkg.torch.onnx.fx_nodek%relu_8 : [num_users=1] = call_function[target=torch.ops.aten.relu.default](args = (%add_13,), kwargs = {})JÅ
+pkg.torch.onnx.name_scopesc['', 'stage2', 'stage2.rest_blocks', 'stage2.rest_blocks.0', 'stage2.rest_blocks.0.relu', 'relu_8']JÏ
+pkg.torch.onnx.stack_traceÕFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 141, in forward
+    x = self.stage2(x)       # Á¨¨‰∫åÈò∂ÊÆµ
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 107, in forward
+    x = self.rest_blocks(x)      # ÂÜçËøáÂâ©‰∏ãÁöÑÂùóÔºåÊ∑±ÂåñÁâπÂæÅ
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 70, in forward
+    out = self.relu(out)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/activation.py", line 144, in forward
+    return F.relu(input, inplace=self.inplace)
+Ô
+relu_8
+val_96mean	node_mean"
+ReduceMean*
+noop_with_empty_axes †*
+keepdims†J£
+	namespaceï: __main__.ResNetMNIST/classifier: torch.nn.modules.container.Sequential/classifier.0: torch.nn.modules.pooling.AdaptiveAvgPool2d/mean: aten.mean.dimJ£
+pkg.torch.onnx.class_hierarchyÄ['__main__.ResNetMNIST', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.pooling.AdaptiveAvgPool2d', 'aten.mean.dim']Jé
+pkg.torch.onnx.fx_nodet%mean : [num_users=1] = call_function[target=torch.ops.aten.mean.dim](args = (%relu_8, [-1, -2], True), kwargs = {})JH
+pkg.torch.onnx.name_scopes*['', 'classifier', 'classifier.0', 'mean']JÍ
+pkg.torch.onnx.stack_traceÀFile "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 142, in forward
+    x = self.classifier(x)   # ÂàÜÁ±ªËæìÂá∫
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/pooling.py", line 1500, in forward
+    return F.adaptive_avg_pool2d(input, self.output_size)
+∏
+mean
+val_100view	node_view"Reshape*
+	allowzero†Jù
+	namespaceè: __main__.ResNetMNIST/classifier: torch.nn.modules.container.Sequential/classifier.1: torch.nn.modules.flatten.Flatten/view: aten.view.defaultJú
+pkg.torch.onnx.class_hierarchyz['__main__.ResNetMNIST', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.flatten.Flatten', 'aten.view.default']Jâ
+pkg.torch.onnx.fx_nodeo%view : [num_users=1] = call_function[target=torch.ops.aten.view.default](args = (%mean, [1, 32]), kwargs = {})JH
+pkg.torch.onnx.name_scopes*['', 'classifier', 'classifier.1', 'view']JÂ
+pkg.torch.onnx.stack_trace∆File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 142, in forward
+    x = self.classifier(x)   # ÂàÜÁ±ªËæìÂá∫
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/flatten.py", line 56, in forward
+    return input.flatten(self.start_dim, self.end_dim)
+Ø	
+view
+classifier.2.weight
+classifier.2.biaslinearnode_linear"Gemm*
+beta  Ä?†*
+transB†*
+alpha  Ä?†*
+transA †Jü
+	namespaceë: __main__.ResNetMNIST/classifier: torch.nn.modules.container.Sequential/classifier.2: torch.nn.modules.linear.Linear/linear: aten.linear.defaultJú
+pkg.torch.onnx.class_hierarchyz['__main__.ResNetMNIST', 'torch.nn.modules.container.Sequential', 'torch.nn.modules.linear.Linear', 'aten.linear.default']J≥
+pkg.torch.onnx.fx_nodeò%linear : [num_users=1] = call_function[target=torch.ops.aten.linear.default](args = (%view, %p_classifier_2_weight, %p_classifier_2_bias), kwargs = {})JJ
+pkg.torch.onnx.name_scopes,['', 'classifier', 'classifier.2', 'linear']J·
+pkg.torch.onnx.stack_trace¬File "/home/tet/zhaoheng/fast-api-project/test/resnet_test.py", line 142, in forward
+    x = self.classifier(x)   # ÂàÜÁ±ªËæìÂá∫
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/container.py", line 250, in forward
+    input = module(input)
+  File "/home/tet/anaconda3/envs/diffuser/lib/python3.10/site-packages/torch/nn/modules/linear.py", line 134, in forward
+    return F.linear(input, self.weight, self.bias)
+main_graph*[Bstem.0.weightj"
+locationresnet_mnist.onnx.dataj
+offset0j
+length576p*v B$stage2.first_block.shortcut.0.weightj"
+locationresnet_mnist.onnx.dataj
+offset1856j
+length2048p*`
+ Bclassifier.2.weightj"
+locationresnet_mnist.onnx.dataj
+offset576j
+length1280p*A
+Bclassifier.2.biasJ(èï2>H≤Ω˛,>I%º;›ƒÂΩ«†5ºY =Øâ	>>È¿=\ é<*qBstage1.first_block.conv1.weightj"
+locationresnet_mnist.onnx.dataj
+offset3904j
+length9216p*rBstage1.first_block.conv2.weightj"
+locationresnet_mnist.onnx.dataj
+offset13120j
+length9216p*tB!stage1.rest_blocks.0.conv1.weightj"
+locationresnet_mnist.onnx.dataj
+offset22336j
+length9216p*tB!stage1.rest_blocks.0.conv2.weightj"
+locationresnet_mnist.onnx.dataj
+offset31552j
+length9216p*s Bstage2.first_block.conv1.weightj"
+locationresnet_mnist.onnx.dataj
+offset40768j
+length18432p*s  Bstage2.first_block.conv2.weightj"
+locationresnet_mnist.onnx.dataj
+offset59200j
+length36864p*u  B!stage2.rest_blocks.0.conv1.weightj"
+locationresnet_mnist.onnx.dataj
+offset96064j
+length36864p*v  B!stage2.rest_blocks.0.conv2.weightj"
+locationresnet_mnist.onnx.dataj
+offset132928j
+length36864p*Bval_96Jˇˇˇˇˇˇˇˇ˛ˇˇˇˇˇˇˇ*Bval_100J               Zô
+x
+
+
+
+
+"=
+/pkg.torch.export.graph_signature.InputSpec.kind
+USER_INPUT"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNonebY
+linear
+
+
+
+"?
+0pkg.torch.export.graph_signature.OutputSpec.kindUSER_OUTPUTj'
+stem.0.weight
+
+
+
+
+j>
+$stage2.first_block.shortcut.0.weight
+
+ 
+
+
+jﬁ
+classifier.2.weight
+
+
+
+ "<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone":
+!pkg.torch.onnx.original_node_namep_classifier_2_weightj÷
+classifier.2.bias
+
+
+
+"<
+/pkg.torch.export.graph_signature.InputSpec.kind	PARAMETER"=
+5pkg.torch.export.graph_signature.InputSpec.persistentNone"8
+!pkg.torch.onnx.original_node_namep_classifier_2_biasj9
+stage1.first_block.conv1.weight
+
+
+
+
+j9
+stage1.first_block.conv2.weight
+
+
+
+
+j;
+!stage1.rest_blocks.0.conv1.weight
+
+
+
+
+j;
+!stage1.rest_blocks.0.conv2.weight
+
+
+
+
+j9
+stage2.first_block.conv1.weight
+
+ 
+
+
+j9
+stage2.first_block.conv2.weight
+
+ 
+ 
+
+j;
+!stage2.rest_blocks.0.conv1.weight
+
+ 
+ 
+
+j;
+!stage2.rest_blocks.0.conv2.weight
+
+ 
+ 
+
+jR
+val_96
+
+
+"<
+$pkg.onnxscript.optimizer.folded_from['val_94', 'val_95']jS
+val_100
+
+
+"<
+$pkg.onnxscript.optimizer.folded_from['val_98', 'val_99']j!
+getitem
+
+
+
+
+j
+relu
+
+
+
+
+j#
+	getitem_5
+
+
+
+
+j 
+relu_1
+
+
+
+
+j$
+
+getitem_10
+
+
+
+
+j
+add_3
+
+
+
+
+j 
+relu_2
+
+
+
+
+j$
+
+getitem_15
+
+
+
+
+j 
+relu_3
+
+
+
+
+j$
+
+getitem_20
+
+
+
+
+j
+add_6
+
+
+
+
+j 
+relu_4
+
+
+
+
+j$
+
+getitem_25
+
+
+ 
+
+j$
+
+getitem_30
+
+
+ 
+
+j 
+relu_5
+
+
+ 
+
+j$
+
+getitem_35
+
+
+ 
+
+j 
+add_10
+
+
+ 
+
+j 
+relu_6
+
+
+ 
+
+j$
+
+getitem_40
+
+
+ 
+
+j 
+relu_7
+
+
+ 
+
+j$
+
+getitem_45
+
+
+ 
+
+j 
+add_13
+
+
+ 
+
+j 
+relu_8
+
+
+ 
+
+j
+mean
+
+
+ 
+
+j
+view
+
+
+ Çˇ?
+0pkg.torch.export.ExportedProgram.graph_signature ?
+# inputs
+p_stem_0_weight: PARAMETER target='stem.0.weight'
+p_stem_1_weight: PARAMETER target='stem.1.weight'
+p_stem_1_bias: PARAMETER target='stem.1.bias'
+p_stage1_first_block_conv1_weight: PARAMETER target='stage1.first_block.conv1.weight'
+p_stage1_first_block_bn1_weight: PARAMETER target='stage1.first_block.bn1.weight'
+p_stage1_first_block_bn1_bias: PARAMETER target='stage1.first_block.bn1.bias'
+p_stage1_first_block_conv2_weight: PARAMETER target='stage1.first_block.conv2.weight'
+p_stage1_first_block_bn2_weight: PARAMETER target='stage1.first_block.bn2.weight'
+p_stage1_first_block_bn2_bias: PARAMETER target='stage1.first_block.bn2.bias'
+p_stage1_rest_blocks_0_conv1_weight: PARAMETER target='stage1.rest_blocks.0.conv1.weight'
+p_stage1_rest_blocks_0_bn1_weight: PARAMETER target='stage1.rest_blocks.0.bn1.weight'
+p_stage1_rest_blocks_0_bn1_bias: PARAMETER target='stage1.rest_blocks.0.bn1.bias'
+p_stage1_rest_blocks_0_conv2_weight: PARAMETER target='stage1.rest_blocks.0.conv2.weight'
+p_stage1_rest_blocks_0_bn2_weight: PARAMETER target='stage1.rest_blocks.0.bn2.weight'
+p_stage1_rest_blocks_0_bn2_bias: PARAMETER target='stage1.rest_blocks.0.bn2.bias'
+p_stage2_first_block_conv1_weight: PARAMETER target='stage2.first_block.conv1.weight'
+p_stage2_first_block_bn1_weight: PARAMETER target='stage2.first_block.bn1.weight'
+p_stage2_first_block_bn1_bias: PARAMETER target='stage2.first_block.bn1.bias'
+p_stage2_first_block_conv2_weight: PARAMETER target='stage2.first_block.conv2.weight'
+p_stage2_first_block_bn2_weight: PARAMETER target='stage2.first_block.bn2.weight'
+p_stage2_first_block_bn2_bias: PARAMETER target='stage2.first_block.bn2.bias'
+p_stage2_first_block_shortcut_0_weight: PARAMETER target='stage2.first_block.shortcut.0.weight'
+p_stage2_first_block_shortcut_1_weight: PARAMETER target='stage2.first_block.shortcut.1.weight'
+p_stage2_first_block_shortcut_1_bias: PARAMETER target='stage2.first_block.shortcut.1.bias'
+p_stage2_rest_blocks_0_conv1_weight: PARAMETER target='stage2.rest_blocks.0.conv1.weight'
+p_stage2_rest_blocks_0_bn1_weight: PARAMETER target='stage2.rest_blocks.0.bn1.weight'
+p_stage2_rest_blocks_0_bn1_bias: PARAMETER target='stage2.rest_blocks.0.bn1.bias'
+p_stage2_rest_blocks_0_conv2_weight: PARAMETER target='stage2.rest_blocks.0.conv2.weight'
+p_stage2_rest_blocks_0_bn2_weight: PARAMETER target='stage2.rest_blocks.0.bn2.weight'
+p_stage2_rest_blocks_0_bn2_bias: PARAMETER target='stage2.rest_blocks.0.bn2.bias'
+p_classifier_2_weight: PARAMETER target='classifier.2.weight'
+p_classifier_2_bias: PARAMETER target='classifier.2.bias'
+b_stem_1_running_mean: BUFFER target='stem.1.running_mean' persistent=True
+b_stem_1_running_var: BUFFER target='stem.1.running_var' persistent=True
+b_stem_1_num_batches_tracked: BUFFER target='stem.1.num_batches_tracked' persistent=True
+b_stage1_first_block_bn1_running_mean: BUFFER target='stage1.first_block.bn1.running_mean' persistent=True
+b_stage1_first_block_bn1_running_var: BUFFER target='stage1.first_block.bn1.running_var' persistent=True
+b_stage1_first_block_bn1_num_batches_tracked: BUFFER target='stage1.first_block.bn1.num_batches_tracked' persistent=True
+b_stage1_first_block_bn2_running_mean: BUFFER target='stage1.first_block.bn2.running_mean' persistent=True
+b_stage1_first_block_bn2_running_var: BUFFER target='stage1.first_block.bn2.running_var' persistent=True
+b_stage1_first_block_bn2_num_batches_tracked: BUFFER target='stage1.first_block.bn2.num_batches_tracked' persistent=True
+b_stage1_rest_blocks_0_bn1_running_mean: BUFFER target='stage1.rest_blocks.0.bn1.running_mean' persistent=True
+b_stage1_rest_blocks_0_bn1_running_var: BUFFER target='stage1.rest_blocks.0.bn1.running_var' persistent=True
+b_stage1_rest_blocks_0_bn1_num_batches_tracked: BUFFER target='stage1.rest_blocks.0.bn1.num_batches_tracked' persistent=True
+b_stage1_rest_blocks_0_bn2_running_mean: BUFFER target='stage1.rest_blocks.0.bn2.running_mean' persistent=True
+b_stage1_rest_blocks_0_bn2_running_var: BUFFER target='stage1.rest_blocks.0.bn2.running_var' persistent=True
+b_stage1_rest_blocks_0_bn2_num_batches_tracked: BUFFER target='stage1.rest_blocks.0.bn2.num_batches_tracked' persistent=True
+b_stage2_first_block_bn1_running_mean: BUFFER target='stage2.first_block.bn1.running_mean' persistent=True
+b_stage2_first_block_bn1_running_var: BUFFER target='stage2.first_block.bn1.running_var' persistent=True
+b_stage2_first_block_bn1_num_batches_tracked: BUFFER target='stage2.first_block.bn1.num_batches_tracked' persistent=True
+b_stage2_first_block_bn2_running_mean: BUFFER target='stage2.first_block.bn2.running_mean' persistent=True
+b_stage2_first_block_bn2_running_var: BUFFER target='stage2.first_block.bn2.running_var' persistent=True
+b_stage2_first_block_bn2_num_batches_tracked: BUFFER target='stage2.first_block.bn2.num_batches_tracked' persistent=True
+b_stage2_first_block_shortcut_1_running_mean: BUFFER target='stage2.first_block.shortcut.1.running_mean' persistent=True
+b_stage2_first_block_shortcut_1_running_var: BUFFER target='stage2.first_block.shortcut.1.running_var' persistent=True
+b_stage2_first_block_shortcut_1_num_batches_tracked: BUFFER target='stage2.first_block.shortcut.1.num_batches_tracked' persistent=True
+b_stage2_rest_blocks_0_bn1_running_mean: BUFFER target='stage2.rest_blocks.0.bn1.running_mean' persistent=True
+b_stage2_rest_blocks_0_bn1_running_var: BUFFER target='stage2.rest_blocks.0.bn1.running_var' persistent=True
+b_stage2_rest_blocks_0_bn1_num_batches_tracked: BUFFER target='stage2.rest_blocks.0.bn1.num_batches_tracked' persistent=True
+b_stage2_rest_blocks_0_bn2_running_mean: BUFFER target='stage2.rest_blocks.0.bn2.running_mean' persistent=True
+b_stage2_rest_blocks_0_bn2_running_var: BUFFER target='stage2.rest_blocks.0.bn2.running_var' persistent=True
+b_stage2_rest_blocks_0_bn2_num_batches_tracked: BUFFER target='stage2.rest_blocks.0.bn2.num_batches_tracked' persistent=True
+x: USER_INPUT
+
+# outputs
+getitem_3: BUFFER_MUTATION target='stem.1.running_mean'
+getitem_4: BUFFER_MUTATION target='stem.1.running_var'
+add: BUFFER_MUTATION target='stem.1.num_batches_tracked'
+getitem_8: BUFFER_MUTATION target='stage1.first_block.bn1.running_mean'
+getitem_9: BUFFER_MUTATION target='stage1.first_block.bn1.running_var'
+add_1: BUFFER_MUTATION target='stage1.first_block.bn1.num_batches_tracked'
+getitem_13: BUFFER_MUTATION target='stage1.first_block.bn2.running_mean'
+getitem_14: BUFFER_MUTATION target='stage1.first_block.bn2.running_var'
+add_2: BUFFER_MUTATION target='stage1.first_block.bn2.num_batches_tracked'
+getitem_18: BUFFER_MUTATION target='stage1.rest_blocks.0.bn1.running_mean'
+getitem_19: BUFFER_MUTATION target='stage1.rest_blocks.0.bn1.running_var'
+add_4: BUFFER_MUTATION target='stage1.rest_blocks.0.bn1.num_batches_tracked'
+getitem_23: BUFFER_MUTATION target='stage1.rest_blocks.0.bn2.running_mean'
+getitem_24: BUFFER_MUTATION target='stage1.rest_blocks.0.bn2.running_var'
+add_5: BUFFER_MUTATION target='stage1.rest_blocks.0.bn2.num_batches_tracked'
+getitem_33: BUFFER_MUTATION target='stage2.first_block.bn1.running_mean'
+getitem_34: BUFFER_MUTATION target='stage2.first_block.bn1.running_var'
+add_8: BUFFER_MUTATION target='stage2.first_block.bn1.num_batches_tracked'
+getitem_38: BUFFER_MUTATION target='stage2.first_block.bn2.running_mean'
+getitem_39: BUFFER_MUTATION target='stage2.first_block.bn2.running_var'
+add_9: BUFFER_MUTATION target='stage2.first_block.bn2.num_batches_tracked'
+getitem_28: BUFFER_MUTATION target='stage2.first_block.shortcut.1.running_mean'
+getitem_29: BUFFER_MUTATION target='stage2.first_block.shortcut.1.running_var'
+add_7: BUFFER_MUTATION target='stage2.first_block.shortcut.1.num_batches_tracked'
+getitem_43: BUFFER_MUTATION target='stage2.rest_blocks.0.bn1.running_mean'
+getitem_44: BUFFER_MUTATION target='stage2.rest_blocks.0.bn1.running_var'
+add_11: BUFFER_MUTATION target='stage2.rest_blocks.0.bn1.num_batches_tracked'
+getitem_48: BUFFER_MUTATION target='stage2.rest_blocks.0.bn2.running_mean'
+getitem_49: BUFFER_MUTATION target='stage2.rest_blocks.0.bn2.running_var'
+add_12: BUFFER_MUTATION target='stage2.rest_blocks.0.bn2.num_batches_tracked'
+linear: USER_OUTPUT
+Ç8
+2pkg.torch.export.ExportedProgram.range_constraints{}B
+ 
