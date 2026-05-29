@@ -6,19 +6,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-from nbclient.client import timestamp
-from torch import Tensor
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader
-from torchvision.models import resnet18, ResNet18_Weights
-import torchvision.transforms.functional as TF
 import matplotlib.pyplot as plt
 import numpy as np
 from datetime import datetime
 import time
-import copy
-from scipy import linalg
 
+# --- 路径与环境设置 ---
 CURRENT_DIR = Path(__file__).resolve().parent
 SRC_DIR = CURRENT_DIR.parent
 PROJECT_ROOT_DIR = SRC_DIR.parent
@@ -27,36 +22,35 @@ IMAGE_DIR = CURRENT_DIR / 'images'
 MODEL_DIR = CURRENT_DIR / 'models'
 os.makedirs(IMAGE_DIR, exist_ok=True)
 os.makedirs(MODEL_DIR, exist_ok=True)
+
 LATEST_MODEL_PATH = MODEL_DIR / "latest_model.pth"
-COMBINE_IMAGES_ROW: int = 3  # 合并后的图像的行数，用来形成一副多个子图的整体图片
-COMBINE_IMAGES_COL: int = 3  # 合并后的图像的列数，用来形成一副多个子图的整体图片
-IMAGE_WIDTH: int = 28  # 图片的宽度像素
-IMAGE_HEIGHT: int = 28  # 图片的高度像素
+COMBINE_IMAGES_ROW: int = 3
+COMBINE_IMAGES_COL: int = 3
+IMAGE_WIDTH: int = 28
+IMAGE_HEIGHT: int = 28
 
 project_root_str = str(PROJECT_ROOT_DIR)
 if project_root_str not in sys.path:
     sys.path.insert(0, project_root_str)
 
 from utils.logger import create_logger
-
-logger = create_logger(__name__)
 from utils.gpu_info import init_gpu_environment
 from utils.date_util import get_current_time
+# 引入评估工具 (请确保路径与 DDPM 中一致)
+from utils.image_evaluator import evaluate_images
+from utils.fid_pr_evaluator import compute_fid_and_pr
+
+logger = create_logger(__name__)
 
 # --- 1. 参数设置 ---
 DEVICE = init_gpu_environment()
 BATCH_SIZE = 128
-NUM_EPOCHS = 3
-
+NUM_EPOCHS = 500
 LR = 1e-3
 WEIGHT_DECAY = 1e-5
 LATENT_DIM = 24
 
-
-N_GEN_EVAL = 10000
-GEN_BATCH = 256
-
-# --- 2. 加载 MNIST 数据集 ---
+# --- 2. 数据加载 ---
 transform = transforms.Compose([transforms.ToTensor()])
 train_dataset = datasets.MNIST(root=DATA_DIR, train=True, download=False, transform=transform)
 train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
@@ -64,7 +58,7 @@ train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
 test_dataset = datasets.MNIST(root=DATA_DIR, train=False, download=False, transform=transform)
 test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True)
 
-
+# --- 3. 模型定义 ---
 class ResBlock(nn.Module):
     def __init__(self, ch):
         super().__init__()
@@ -80,36 +74,32 @@ class ResBlock(nn.Module):
     def forward(self, x):
         return self.act(x + self.net(x))
 
-
 class ConvVAE(nn.Module):
     def __init__(self, z_dim=24):
         super().__init__()
         self.z_dim = z_dim
-
         # Encoder
         self.enc = nn.Sequential(
-            nn.Conv2d(1, 32, 4, 2, 1),  # 28 -> 14
+            nn.Conv2d(1, 32, 4, 2, 1),
             nn.BatchNorm2d(32),
             nn.SiLU(inplace=True),
             ResBlock(32),
-
-            nn.Conv2d(32, 64, 4, 2, 1),  # 14 -> 7
+            nn.Conv2d(32, 64, 4, 2, 1),
             nn.BatchNorm2d(64),
             nn.SiLU(inplace=True),
             ResBlock(64),
         )
         self.fc_mu = nn.Linear(64 * 7 * 7, z_dim)
         self.fc_logvar = nn.Linear(64 * 7 * 7, z_dim)
-
         # Decoder
         self.fc_dec = nn.Linear(z_dim, 64 * 7 * 7)
         self.dec = nn.Sequential(
             ResBlock(64),
-            nn.ConvTranspose2d(64, 32, 4, 2, 1),  # 7 -> 14
+            nn.ConvTranspose2d(64, 32, 4, 2, 1),
             nn.BatchNorm2d(32),
             nn.SiLU(inplace=True),
             ResBlock(32),
-            nn.ConvTranspose2d(32, 1, 4, 2, 1)  # 14 -> 28 (logits)
+            nn.ConvTranspose2d(32, 1, 4, 2, 1)
         )
 
     def encode(self, x):
@@ -133,49 +123,34 @@ class ConvVAE(nn.Module):
         logits = self.decode_logits(z)
         return logits, mu, logvar
 
-
 def beta_schedule(epoch):
-    if epoch >= 40:
-        return 0.15
+    if epoch >= 40: return 0.15
     return 0.15 * (epoch / max(1, 40))
 
-
 def loss_fn(logits, x, mu, logvar, beta=1.0, free_bits_per_dim=0.0, l1_weight=0.0):
-    # BCE recon per sample
     bce = F.binary_cross_entropy_with_logits(logits, x, reduction='none').flatten(1).sum(1)
-    # L1 recon per sample
     x_hat = torch.sigmoid(logits)
     l1 = F.l1_loss(x_hat, x, reduction='none').flatten(1).sum(1)
-
-    # KL per dim -> free bits
-    kl_per_dim = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())  # [B, D]
+    kl_per_dim = -0.5 * (1 + logvar - mu.pow(2) - logvar.exp())
     if free_bits_per_dim > 0:
         kl_per_dim = torch.clamp(kl_per_dim, min=free_bits_per_dim)
-    kl = kl_per_dim.sum(1)  # [B]
-
+    kl = kl_per_dim.sum(1)
     recon = bce + l1_weight * l1
     elbo = recon + beta * kl
-    loss = elbo.mean()
-    # logger.info(f"recon shape:{recon.shape}, kl shape:{kl.shape}")
-    return loss, recon.mean(), kl.mean()
+    return elbo.mean(), recon.mean(), kl.mean()
 
+# --- 5. 核心功能函数 ---
 
-# --- 5. 训练模型 ---
 def train_model():
     model = ConvVAE(z_dim=LATENT_DIM).to(DEVICE)
     optimizer = optim.AdamW(model.parameters(), lr=LR, weight_decay=WEIGHT_DECAY)
-    model.train()
-
-    loss_list, bce_list, kld_list = [], [], []  # 损失函数记录
+    
+    loss_list, bce_list, kld_list = [], [], []
     start_epoch = 0
-    end_epoch = start_epoch + NUM_EPOCHS
-    train_times = 0 # 训练次数，也就是执行了多少次 train_model 函数
-    total_training_time = 0.0  # 累计训练总时长（秒）
-
-    # 记录本次运行开始时间
+    train_times = 0
+    total_training_time = 0.0
     start_time = time.time()
 
-    # 如果本地存在预训练的模型，则直接加载
     if LATEST_MODEL_PATH.exists():
         checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE, weights_only=False)
         model.load_state_dict(checkpoint["model_state_dict"])
@@ -186,40 +161,27 @@ def train_model():
         start_epoch = checkpoint["epoch"]
         train_times = checkpoint.get("train_times", 0)
         total_training_time = checkpoint.get("total_training_time", 0.0)
-        logger.info(
-            f"已加载模型, 起始 epoch={start_epoch}， 终止 epoch={end_epoch}, 累计训练时长={total_training_time:.2f}s")
-    else:
-        logger.info("第一次训练模型")
-
+        logger.info(f"已加载模型, 起始 epoch={start_epoch}, 累计时长={total_training_time:.2f}s")
+    
+    end_epoch = start_epoch + NUM_EPOCHS
     for epoch in range(start_epoch, end_epoch):
+        model.train()
         avg_loss, avg_bce, avg_kld = 0, 0, 0
         temp_mu, temp_std, temp_logvar = [], [], []
-
         beta = beta_schedule(epoch)
-        total_loss, total_n = 0.0, 0
+
         for batch_idx, (x, _) in enumerate(train_loader):
             x = x.to(DEVICE, non_blocking=True)
-            bs = x.size(0)  # 注意，bs不一定就是代码首部定义的 BATCH_SIZE，因为最后一次遍历的数量会小于 BATCH_SIZE
-
             optimizer.zero_grad(set_to_none=True)
-            logits, mu, logvar = model.forward(x)
-            loss, bce, kld = loss_fn(
-                logits, x, mu, logvar,
-                beta=beta,
-                free_bits_per_dim=0.02,
-                l1_weight=0.15
-            )
+            logits, mu, logvar = model(x)
+            loss, bce, kld = loss_fn(logits, x, mu, logvar, beta=beta, free_bits_per_dim=0.02, l1_weight=0.15)
             loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(), 1.0)
             optimizer.step()
 
-            total_loss += loss.item() * bs
-            total_n += bs
-
             avg_loss = (avg_loss * batch_idx + loss.item()) / (batch_idx + 1)
             avg_bce = (avg_bce * batch_idx + bce.item()) / (batch_idx + 1)
             avg_kld = (avg_kld * batch_idx + kld.item()) / (batch_idx + 1)
-
             temp_mu.append(mu.mean().item())
             temp_std.append(mu.std().item())
             temp_logvar.append(logvar.mean().item())
@@ -227,15 +189,10 @@ def train_model():
         loss_list.append(avg_loss)
         bce_list.append(avg_bce)
         kld_list.append(avg_kld)
+        logger.info(f"Epoch [{epoch + 1}/{end_epoch}] Loss: {avg_loss:.2f} (KLD: {avg_kld:.2f})")
 
-        logger.info(
-            f"Epoch [{epoch + 1}/{end_epoch}] Loss: {avg_loss:.2f} (BCE: {avg_bce:.2f}, KLD: {avg_kld:.2f}), beta: {beta}")
-
-    # 计算本次运行耗时
     elapsed = time.time() - start_time
     total_training_time += elapsed
-
-    # 保存模型
     torch.save({
         'epoch': end_epoch,
         'model_state_dict': model.state_dict(),
@@ -244,314 +201,200 @@ def train_model():
         'bce_losses': bce_list,
         'kld_losses': kld_list,
         'train_times': train_times + 1,
-        'total_training_time': total_training_time,  # 添加累计训练总时长
+        'total_training_time': total_training_time,
         'mu_mean': float(np.mean(temp_mu)),
         'mu_std': float(np.mean(temp_std)),
         'logvar_mean': float(np.mean(temp_logvar))
     }, f=LATEST_MODEL_PATH)
+    logger.info(f"模型已保存。本次耗时 {elapsed:.2f}s")
 
-    logger.info(f"模型已保存，本次训练耗时 {elapsed:.2f}s，累计总时长 {total_training_time:.2f}s")
+def generate_loss_plot():
+    """新模式: 生成采样后的 Loss 图表"""
+    if not LATEST_MODEL_PATH.exists():
+        logger.error("未找到模型文件。")
+        return
+    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
+    loss_list = checkpoint.get('train_losses', [])
+    bce_list = checkpoint.get('bce_losses', [])
+    kld_list = checkpoint.get('kld_losses', [])
+    
+    if not loss_list: return
 
     plt.figure(figsize=(15, 5))
-    titles = ['Total Loss', 'BCE (Recon Loss)', 'KLD (KL Loss)']
-    data_to_plot = [loss_list, bce_list, kld_list]
+    titles = ['Total Loss', 'Recon (BCE+L1)', 'KL Divergence']
+    datasets = [loss_list, bce_list, kld_list]
     colors = ['b', 'g', 'r']
 
     for i in range(3):
         plt.subplot(1, 3, i + 1)
-        curr_data = data_to_plot[i]
-        epochs_range = np.arange(1, len(curr_data) + 1)
-        plt.plot(epochs_range, curr_data, color=colors[i], alpha=0.3)
-
-        # 20点采样逻辑
-        num_pts = min(len(curr_data), 20)
-        indices = np.linspace(0, len(curr_data) - 1, num_pts, dtype=int)
-        plt.scatter(epochs_range[indices], np.array(curr_data)[indices], color=colors[i], s=30)
-
+        data = datasets[i]
+        epochs = np.arange(1, len(data) + 1)
+        plt.plot(epochs, data, color=colors[i], alpha=0.3)
+        # 采样 20 个点
+        num_pts = min(len(data), 20)
+        indices = np.linspace(0, len(data) - 1, num_pts, dtype=int)
+        plt.scatter(epochs[indices], np.array(data)[indices], color=colors[i], s=30)
         plt.title(titles[i])
-        plt.xlabel("epochs")
         plt.grid(True, linestyle='--', alpha=0.5)
 
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    save_path = MODEL_DIR / f"vae_loss_plot_epoch_{len(loss_list)}.png"
     plt.tight_layout()
-    plt.savefig(MODEL_DIR / f"loss_metrics_{timestamp}_epoch_{end_epoch}.png")
+    plt.savefig(save_path)
     plt.close()
-    logger.info("指标图表已保存。")
+    logger.info(f"Loss 图表已保存至: {save_path.name}")
 
-
-def show_model_status():
-    """查看当前模型参数及隐空间分布状态"""
+@torch.no_grad()
+def evaluate_model():
+    """新模式: 评估 VAE 生成质量 (IS + FID + P&R)"""
     if not LATEST_MODEL_PATH.exists():
-        logger.info("\n[提示] 尚未发现模型文件。")
+        logger.error("未找到模型，请先训练。")
         return
 
+    logger.info("开始评估 VAE 生成质量...")
+    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
+    model = ConvVAE(z_dim=LATENT_DIM).to(DEVICE)
+    model.load_state_dict(checkpoint['model_state_dict'])
+    model.eval()
+
+    total_eval_samples = 500  # 评估样本数
+    batch_size = 100
+    gen_list = []
+    
+    start_time = time.time()
+    # 1. 从先验分布生成图片
+    for i in range(0, total_eval_samples, batch_size):
+        z = torch.randn(batch_size, LATENT_DIM, device=DEVICE)
+        imgs = torch.sigmoid(model.decode_logits(z))
+        gen_list.append(imgs)
+    all_gen_imgs = torch.cat(gen_list, dim=0)
+
+    # 2. 从测试集获取真实图片
+    real_list = []
+    collected = 0
+    for x, _ in test_loader:
+        take = min(x.size(0), total_eval_samples - collected)
+        real_list.append(x[:take])
+        collected += take
+        if collected >= total_eval_samples: break
+    all_real_imgs = torch.cat(real_list, dim=0).to(DEVICE)
+
     try:
-        checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
+        # 3. 计算指标
+        logger.info(" -> 计算分类器指标 (置信度/熵/覆盖率)...")
+        max_conf, entropy, coverage = evaluate_images(all_gen_imgs, device=DEVICE)
 
-        epoch = checkpoint.get('epoch', 0)
-        train_times = checkpoint.get('train_times', 0)
-        loss_list = checkpoint.get('train_losses', [])
-        latest_loss = loss_list[-1] if loss_list else "N/A"
-        total_training_time = checkpoint.get('total_training_time', 0)
+        logger.info(" -> 计算特征流形指标 (FID / Precision / Recall)...")
+        fid_score, precision, recall = compute_fid_and_pr(
+            gen_images=all_gen_imgs, 
+            real_images=all_real_imgs, 
+            device=DEVICE
+        )
 
-        # 提取隐空间统计量
-        mu_mean = checkpoint.get('mu_mean', "N/A")
-        mu_std = checkpoint.get('mu_std', "N/A")
-        logvar_mean = checkpoint.get('logvar_mean', "N/A")
-
-        logger.info(f"{'模型状态报告':^36}")
-        logger.info(f" 已训练总轮数:    {epoch}")
-        logger.info(f" 累计训练次数:    {train_times}")
-        if isinstance(latest_loss, float):
-            logger.info(f" 最近平均 Loss:   {latest_loss:.4f}")
-        # 格式化训练时长
-        if total_training_time < 3600:  # 小于1小时
-            duration = total_training_time / 60
-            unit = "分钟"
-        else:
-            duration = total_training_time / 3600
-            unit = "小时"
-
-        logger.info(f" 训练时长：{duration:.1f}{unit}")
-
-        logger.info(f"{'隐空间分布 (Latent Space Check)':^36}")
-        # 核心调试指标
-        if isinstance(mu_mean, (float, int)):
-            logger.info(f" Mu 均值 (应接近 0):   {mu_mean:+.4f}")
-            logger.info(f" Mu 标准差 (应接近 1): {mu_std:.4f}")
-            logger.info(f" LogVar 均值 (应负数): {logvar_mean:.4f}")
-
-            # 简单的自动诊断
-            if abs(mu_mean) > 0.5 or abs(mu_std - 1.0) > 0.5:
-                logger.info("\n[诊断结论]: 隐空间未对齐标准正态分布。")
-                logger.info(" -> 原因: KLD 权重可能太低 (当前 0.1)。")
-                logger.info(" -> 结果: Generate 模式无法生成有效数字。")
-            else:
-                logger.info("\n[诊断结论]: 隐空间分布良好。")
-        else:
-            logger.info(" 暂无隐空间统计数据，请先执行一次训练。")
-        logger.info("=" * 40 + "\n")
-
+        elapsed = time.time() - start_time
+        logger.info("\n" + "=" * 55)
+        logger.info(f"{'VAE 生成质量评估报告':^50}")
+        logger.info("-" * 55)
+        logger.info(f" 评估规模     : {total_eval_samples} Samples")
+        logger.info(f" 平均置信度   : {max_conf:.4f} (越高越好)")
+        logger.info(f" 类别覆盖率   : {coverage:.4f} (越高越好)")
+        logger.info(f" FID 分数     : {fid_score:.4f} (越低越好)")
+        logger.info(f" Precision    : {precision:.4f} (保真度)")
+        logger.info(f" Recall       : {recall:.4f} (多样性)")
+        logger.info("=" * 55 + "\n")
     except Exception as e:
-        logger.error(f"读取模型状态失败: {e}")
+        logger.error(f"评估过程中出错: {e}")
 
+# --- 原有功能的辅助函数 ---
+def load_model() -> ConvVAE:
+    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
+    m = ConvVAE(z_dim=LATENT_DIM).to(DEVICE)
+    m.load_state_dict(checkpoint['model_state_dict'])
+    m.eval()
+    return m
 
 def save_large_image(img_data, path: Path, title: str = None, is_compare: bool = False):
-    """保存大尺寸图片的辅助函数"""
-    # 如果是对比图，宽度加倍
     figsize = (8, 4) if is_compare else (4, 4)
-    plt.figure(figsize=figsize, dpi=100)  # 100 DPI 下 4英寸=400像素
-
-    if is_compare:
-        plt.imshow(img_data, cmap='gray')
-    else:
-        plt.imshow(img_data, cmap='gray')
-
-    if title:
-        plt.title(title)
+    plt.figure(figsize=figsize, dpi=100)
+    plt.imshow(img_data, cmap='gray')
+    if title: plt.title(title)
     plt.axis('off')
     plt.savefig(path, bbox_inches='tight')
     plt.close()
 
-
-# 从本地加载 pth 格式的模型文件，并使用 evaluate 模式
-def load_model() -> ConvVAE:
-    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
-    current_model = ConvVAE(z_dim=LATENT_DIM).to(DEVICE)
-    current_model.load_state_dict(checkpoint['model_state_dict'])
-    current_model.eval()
-    return current_model
-
-
 @torch.no_grad()
 def generate_mode():
-    """模式 2-1: 生成 9 张大图和宫格图"""
-    if not LATEST_MODEL_PATH.exists():
-        logger.error("未找到模型。")
-        return
-
     current_model = load_model()
-    current_timestamp: str = get_current_time()
+    current_timestamp = get_current_time()
     z = torch.randn(COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL, LATENT_DIM, device=DEVICE)
-    gen_imgs: Tensor = torch.sigmoid(current_model.decode_logits(z)).cpu()
-
-    # 1. 保存 9 张独立大图
-    for i in range(COMBINE_IMAGES_ROW * COMBINE_IMAGES_COL):
-        # 命名: vae_image_generate_时间戳_编号.png
-        filename = IMAGE_DIR / f"vae_image_generate_{current_timestamp}_{i + 1:02d}.png"
-        # 将图片写入到本地 images 文件夹
-        save_large_image(gen_imgs[i].reshape(IMAGE_HEIGHT, IMAGE_WIDTH), filename)
-
-    # 2. 保存 3*3 宫格图
-    fig, axes = plt.subplots(COMBINE_IMAGES_ROW, COMBINE_IMAGES_COL, figsize=(10, 10))
-    plt.subplots_adjust(wspace=0.3, hspace=0.3)
+    gen_imgs = torch.sigmoid(current_model.decode_logits(z)).detach().cpu().numpy()
+    
+    # 保存宫格
+    fig, axes = plt.subplots(COMBINE_IMAGES_ROW, COMBINE_IMAGES_COL, figsize=(8, 8))
     for i, ax in enumerate(axes.flat):
         ax.imshow(gen_imgs[i].reshape(IMAGE_HEIGHT, IMAGE_WIDTH), cmap='gray')
         ax.axis('off')
-    grid_fn = IMAGE_DIR / f"vae_image_generate_{current_timestamp}.png"
-    plt.savefig(grid_fn, bbox_inches='tight')
+    plt.savefig(IMAGE_DIR / f"vae_gen_{current_timestamp}.png", bbox_inches='tight')
     plt.close()
-    logger.info("Generate 模式运行完毕，图片已保存。")
+    logger.info("Generate 模式完成。")
 
 @torch.no_grad()
 def compare_mode():
-    """模式 2-2: 重构 9 张对比大图和宫格图"""
-    if not LATEST_MODEL_PATH.exists():
-        logger.error("未找到模型。")
-        return
-
     current_model = load_model()
-    loader = DataLoader(datasets.MNIST(root=DATA_DIR, train=False, transform=transform), batch_size=9, shuffle=True)
-
-    # 收集原始图像和对应的生成图像
-    orig_list = []  # 存放原始图像张量
-    gen_list = []  # 存放生成图像张量
-    need = 9
-    it = iter(loader)
-
-    while need > 0:
-        try:
-            x, _ = next(it)
-        except StopIteration:
-            it = iter(loader)
-            x, _ = next(it)
-        x = x.to(DEVICE, non_blocking=True)
-        take = min(need, x.size(0))
-        orig_list.append(x[:take])
-
-        # 对这批图像编码后解码（使用聚合后验采样）
-        mu, logvar = current_model.encode(x[:take])
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        z = mu + eps * std
-        gen = torch.sigmoid(current_model.decode_logits(z)).cpu()
-        gen_list.append(gen)
-
-        need -= take
-
-    # 合并所有批次
-    orig = torch.cat(orig_list, dim=0).cpu()  # [9,1,28,28]
-    gen = torch.cat(gen_list, dim=0)  # [9,1,28,28]
-
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-    # 转为 numpy 并去除通道维度
-    orig_np = orig.squeeze().numpy()  # [9,28,28]
-    recon_np = gen.squeeze().numpy()  # [9,28,28]
-
-    # 1. 保存 9 张独立对比大图
-    for i in range(9):
-        # 左右拼接
-        combined = np.hstack((orig_np[i], recon_np[i]))
-        filename = IMAGE_DIR / f"vae_image_compare_{timestamp}_{i + 1:02d}.png"
-        save_large_image(combined, filename, title="Original | Reconstructed", is_compare=True)
-
-    # 2. 保存 3*3 宫格对比总图
-    fig, axes = plt.subplots(COMBINE_IMAGES_ROW, COMBINE_IMAGES_COL, figsize=(12, 12))
-    plt.subplots_adjust(wspace=0.4, hspace=0.4)
-    for i, ax in enumerate(axes.flat):
-        combined = np.hstack((orig_np[i], recon_np[i]))
-        ax.imshow(combined, cmap='gray')
-        ax.set_title(f"Pair {i + 1:02d}")
-        ax.axis('off')
-    grid_fn = IMAGE_DIR / f"vae_image_compare_{timestamp}.png"
-    plt.savefig(grid_fn, bbox_inches='tight')
-    plt.close()
-    logger.info("Compare 模式运行完毕，图片已保存。")
-
-
-def generate_from_posterior_mode():
-    """从后验聚合分布采样生成图像"""
-    if not LATEST_MODEL_PATH.exists():
-        logger.error("未找到模型。")
-        return
-
-    current_model = load_model()
-
-    # 收集所有训练样本的 mu（或 z）
-    all_mu = []
-    with torch.no_grad():
-        for x, _ in train_loader:  # 使用训练集 DataLoader
-            x = x.to(DEVICE, non_blocking=True)
-            mu, _ = current_model.encode(x)  # 只取 mu
-            all_mu.append(mu.cpu())
-
-    all_mu = torch.cat(all_mu, dim=0)  # [N, LATENT_DIM]
-    logger.info(f"已收集 {all_mu.shape[0]} 个样本的 mu")
-
-    # 方法1：直接使用经验分布（从这些 mu 中随机选择一个）
-    # 方法2：拟合高斯分布，计算均值向量和协方差矩阵（这里使用对角协方差简化）
-    mu_mean = all_mu.mean(dim=0)  # 均值
-    mu_cov = all_mu.var(dim=0)  # 对角方差
-    # 注意：若需要全协方差，可用 np.cov(all_mu.T)，但计算量大
-
-    # 从拟合的高斯分布中采样
-    with torch.no_grad():
-        # 生成9个样本
-        z = torch.randn(9, LATENT_DIM, device=DEVICE) * torch.sqrt(mu_cov).to(DEVICE) + mu_mean.to(DEVICE)
-        gen_imgs = torch.sigmoid(current_model.decode_logits(z)).cpu()
-
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-
-    # 保存 9 张大图和宫格图（沿用原有保存逻辑）
-    for i in range(9):
-        filename = IMAGE_DIR / f"vae_image_posterior_{timestamp}_{i + 1:02d}.png"
-        save_large_image(gen_imgs[i].reshape(28, 28), filename)
+    loader = DataLoader(test_dataset, batch_size=9, shuffle=True)
+    x, _ = next(iter(loader))
+    x = x.to(DEVICE)
+    mu, logvar = current_model.encode(x)
+    z = current_model.reparam(mu, logvar)
+    gen = torch.sigmoid(current_model.decode_logits(z)).cpu().numpy()
+    orig = x.cpu().numpy()
 
     fig, axes = plt.subplots(3, 3, figsize=(10, 10))
-    plt.subplots_adjust(wspace=0.3, hspace=0.3)
     for i, ax in enumerate(axes.flat):
-        ax.imshow(gen_imgs[i].reshape(28, 28), cmap='gray')
+        combined = np.hstack((orig[i][0], gen[i][0]))
+        ax.imshow(combined, cmap='gray')
         ax.axis('off')
-    grid_fn = IMAGE_DIR / f"vae_image_posterior_{timestamp}.png"
-    plt.savefig(grid_fn, bbox_inches='tight')
+    plt.savefig(IMAGE_DIR / f"vae_compare_{get_current_time()}.png", bbox_inches='tight')
     plt.close()
-    logger.info("从后验聚合分布生成完成。")
+    logger.info("Compare 模式完成。")
 
+def show_model_status():
+    if not LATEST_MODEL_PATH.exists(): return
+    checkpoint = torch.load(LATEST_MODEL_PATH, map_location=DEVICE)
+    logger.info(f"\n{'VAE 模型状态':^36}")
+    logger.info(f" 训练轮数: {checkpoint.get('epoch')}")
+    logger.info(f" Mu 均值:  {checkpoint.get('mu_mean', 0):.4f}")
+    logger.info(f" Mu 标准差: {checkpoint.get('mu_std', 0):.4f}")
+    logger.info("-" * 36)
 
+# --- 主循环 ---
 def main():
     while True:
         logger.info("\n" + "=" * 40)
-        logger.info("      VAE 模型管理系统")
+        logger.info("      VAE 模型管理系统 (Enhanced)")
         logger.info(" [1] 训练模型 (Train)")
         logger.info(" [2] 测试模式 (Test: Generate/Compare)")
         logger.info(" [3] 查看模型状态 (Status)")
-        logger.info(" [4] 评估模型 (Evaluate)")
+        logger.info(" [4] 评估模型生成质量 (Evaluate)")
+        logger.info(" [5] 生成损失函数图表 (Loss Plot)")
         logger.info(" [0/exit] 退出程序")
         logger.info("=" * 40)
 
-        choice = input("请选择主菜单功能: ").strip().lower()
+        choice = input("请选择功能: ").strip().lower()
 
         if choice == '1':
             train_model()
         elif choice == '2':
-            while True:
-                logger.info("\n  >>> 测试子菜单:")
-                logger.info("  [1] Generate (从先验采样)")
-                logger.info("  [2] Compare  (重构 9 张测试图片对比)")
-                logger.info("  [3] Generate from posterior (从后验聚合分布采样)")
-                logger.info("  [0/exit] 返回主菜单并完全退出")
-
-                sub_choice = input("  请选择测试功能: ").strip().lower()
-                if sub_choice == '1':
-                    generate_mode()
-                elif sub_choice == '2':
-                    compare_mode()
-                elif sub_choice == '3':
-                    generate_from_posterior_mode()
-                elif sub_choice in ['0', 'exit']:
-                    logger.info("退出程序...")
-                    sys.exit(0)
-                else:
-                    logger.info("  无效输入，请输入 1, 2, 3 或 0")
+            sub_choice = input("  [1] Generate [2] Compare: ").strip()
+            if sub_choice == '1': generate_mode()
+            elif sub_choice == '2': compare_mode()
         elif choice == '3':
             show_model_status()
+        elif choice == '4':
+            evaluate_model()
+        elif choice == '5':
+            generate_loss_plot()
         elif choice in ['0', 'exit']:
-            logger.info("退出程序...")
             break
-        else:
-            logger.info("无效输入，请重新输入 1, 2, 3 或 0")
-
 
 if __name__ == '__main__':
     main()
